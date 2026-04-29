@@ -2,7 +2,7 @@
 
 > A specialized, open-source Point-of-Sale system built exclusively for fabric and textile retailers — solving the variable-unit inventory problem that breaks every standard retail POS.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache License 2.0](https://img.shields.io/badge/license-Apache%202-blue)](https://www.apache.org/licenses/LICENSE-2.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-Backend-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-Vite-61DAFB?logo=react&logoColor=black)](https://react.dev/)
@@ -169,7 +169,7 @@ To get started, fork the repository, create a feature branch off `main`, and ope
 
 ## License
 
-Distributed under the **MIT License**. See [LICENSE](LICENSE) for full text.
+Distributed under the **Apache 2.0 License**. See [LICENSE](LICENSE) for full text.
 
 ---
 
