@@ -1,0 +1,16 @@
+{
+  "folder": "docs/04-api",
+  "created_files": [
+    "authentication.md",
+    "error-format.md",
+    "filtering-sorting.md",
+    "pagination.md",
+    "rest-guidelines.md",
+    "websocket-events.md"
+  ],
+  "notes": [
+    "REST remains source of truth; WebSockets are notification signals.",
+    "Unconfirmed details are marked as Pending Confirmation.",
+    "Aligned with NestJS + Prisma + MySQL and single-shop first scope."
+  ]
+}
