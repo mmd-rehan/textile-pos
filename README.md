@@ -57,6 +57,46 @@ TextilePOS is built from the ground up to solve exactly these problems.
 
 ---
 
+## Quick Start Guide
+
+To run the application locally, follow these steps:
+
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18 or higher recommended)
+- [Docker](https://www.docker.com/) and Docker Compose
+
+### 1. Clone & Install Dependencies
+Run `npm install` in the root directory to install all dependencies for both the frontend and backend:
+```bash
+npm install
+```
+
+### 2. Start MySQL via Docker
+Run the following command to spin up the preconfigured MySQL 8.0 instance:
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
+
+### 3. Initialize Database and Run Prisma Migrations
+Generate the Prisma client and push the schema to the MySQL instance:
+```bash
+# Run Prisma migrations to initialize the database
+npm run prisma:migrate --workspace=backend
+```
+
+### 4. Start the Application
+Launch both the frontend client and NestJS backend concurrently in development mode:
+```bash
+npm run dev
+```
+
+The system will be active at:
+- **Frontend client**: [http://localhost:5173](http://localhost:5173) (Proxies `/api` to backend)
+- **Backend service**: [http://localhost:5000/api/v1](http://localhost:5000/api/v1)
+- **Health Check Endpoint**: [http://localhost:5000/api/v1/health](http://localhost:5000/api/v1/health) (or proxied: [http://localhost:5173/api/v1/health](http://localhost:5173/api/v1/health))
+
+---
+
 # Complete Project Description — Textile Trading POS & Inventory ERP
 
 ## Project Overview
