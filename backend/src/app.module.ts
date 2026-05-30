@@ -8,12 +8,16 @@ import { RolesModule } from './modules/roles/roles.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { BrandsModule } from './modules/brands/brands.module';
+import { ProductsModule } from './modules/products/products.module';
+import { UnitsModule } from './modules/units/units.module';
+import { BatchesModule } from './modules/batches/batches.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import configuration from './config/configuration';
 
 @Module({
   imports: [
-    // Configure environment variables globally
     ConfigModule.forRoot({
       load: [configuration],
       isGlobal: true,
@@ -26,11 +30,15 @@ import configuration from './config/configuration';
     PermissionsModule,
     SettingsModule,
     AuditModule,
+    CategoriesModule,
+    BrandsModule,
+    ProductsModule,
+    UnitsModule,
+    BatchesModule,
   ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    // Apply request ID middleware globally to trace all API traffic
     consumer.apply(RequestIdMiddleware).forRoutes('*');
   }
 }

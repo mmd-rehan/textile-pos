@@ -1,23 +1,32 @@
-import { Controller, Get, Body, Put } from '@nestjs/common';
+import { Body, Controller, Get, Put } from '@nestjs/common';
 import { SettingsService } from './settings.service';
+import { createSuccessResponse } from '../../common/utils/response';
 
 @Controller('settings')
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
-  @Get()
-  async getSettings() {
-    const settings = await this.settingsService.getSettings();
-    return {
-      data: settings,
-    };
+  @Get('company')
+  async getCompanySettings() {
+    const data = await this.settingsService.getCompanySettings();
+    return createSuccessResponse(data);
   }
 
-  @Put()
-  async updateSettings(@Body() newSettings: Record<string, any>) {
-    const updated = await this.settingsService.updateSettings(newSettings);
-    return {
-      data: updated,
-    };
+  @Put('company')
+  async updateCompanySettings(@Body() body: Record<string, string>) {
+    const data = await this.settingsService.updateCompanySettings(body);
+    return createSuccessResponse(data);
+  }
+
+  @Get('app')
+  async getAppSettings() {
+    const data = await this.settingsService.getAppSettings();
+    return createSuccessResponse(data);
+  }
+
+  @Put('app')
+  async updateAppSettings(@Body() body: Record<string, string>) {
+    const data = await this.settingsService.updateAppSettings(body);
+    return createSuccessResponse(data);
   }
 }
