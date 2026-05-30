@@ -2,7 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { Logger } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
+import { AppError } from './common/errors/app-error';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -13,6 +14,22 @@ async function bootstrap() {
 
   // Set global endpoint prefix
   app.setGlobalPrefix('api/v1');
+
+  // Global Validation Pipe with auto-transform and validation-to-AppError mapping
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+      exceptionFactory: (errors) => {
+        const details = errors.map((err) => ({
+          field: err.property,
+          constraints: err.constraints ? Object.values(err.constraints) : [],
+        }));
+        return AppError.badRequest('Validation failed', 'VALIDATION_ERROR', details);
+      },
+    }),
+  );
 
   // Apply global interceptors and filters for success & error envelopes
   app.useGlobalInterceptors(new TransformInterceptor());
