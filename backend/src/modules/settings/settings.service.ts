@@ -1,29 +1,45 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name);
-  
-  // In-memory placeholder store for system settings
-  private settings: Record<string, any> = {
-    companyName: 'Textile POS System',
-    currency: 'USD',
-    taxRate: 5.0,
-    allowNegativeStock: false,
-    theme: 'dark',
-  };
 
-  async getSettings(): Promise<Record<string, any>> {
-    this.logger.log('Fetching application settings');
-    return this.settings;
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getCompanySettings(): Promise<Record<string, string>> {
+    const rows = await this.prisma.companySetting.findMany({ orderBy: { key: 'asc' } });
+    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
   }
 
-  async updateSettings(newSettings: Record<string, any>): Promise<Record<string, any>> {
-    this.logger.log(`Updating settings: ${JSON.stringify(newSettings)}`);
-    this.settings = {
-      ...this.settings,
-      ...newSettings,
-    };
-    return this.settings;
+  async updateCompanySettings(patch: Record<string, string>): Promise<Record<string, string>> {
+    await Promise.all(
+      Object.entries(patch).map(([key, value]) =>
+        this.prisma.companySetting.upsert({
+          where: { key },
+          create: { key, value },
+          update: { value },
+        }),
+      ),
+    );
+    return this.getCompanySettings();
+  }
+
+  async getAppSettings(): Promise<Record<string, string>> {
+    const rows = await this.prisma.appSetting.findMany({ orderBy: { key: 'asc' } });
+    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  }
+
+  async updateAppSettings(patch: Record<string, string>): Promise<Record<string, string>> {
+    await Promise.all(
+      Object.entries(patch).map(([key, value]) =>
+        this.prisma.appSetting.upsert({
+          where: { key },
+          create: { key, value },
+          update: { value },
+        }),
+      ),
+    );
+    return this.getAppSettings();
   }
 }
