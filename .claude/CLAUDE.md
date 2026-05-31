@@ -30,3 +30,19 @@ Important project rules:
    - What remains pending
    - How to test this milestone
    - Any assumptions made
+
+Currency rules:
+1. Sales in v1 should use one global/base selling currency only.
+2. Do not add full sales multi-currency in v1.
+3. Purchases must support multiple currencies such as PKR, AED, USD, EUR, GBP, SAR, INR, etc.
+4. Currencies should be stored using currency codes, for example PKR, AED, USD.
+5. Do not hardcode purchase logic to only PKR.
+6. Store purchase amounts in the original purchase currency.
+7. Also store converted base currency amounts for inventory valuation, profit reporting, and internal accounting.
+8. Store the exchange rate used at the time of purchase.
+9. Do not rely on live exchange rates in v1.
+10. The exchange rate should be manually entered by admin/user during purchase if purchase currency differs from base currency.
+11. Sale prices and sale invoices should remain in the global/base currency for now.
+12. Purchase currency support must not break roll costing, supplier ledger, reports, or future accounting.
+13. Use Decimal-safe handling for all currency amounts and exchange rates.
+14. Do not implement advanced foreign exchange gain/loss accounting yet unless explicitly requested later.
