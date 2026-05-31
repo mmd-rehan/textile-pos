@@ -280,3 +280,99 @@ export interface CreateBatchForm {
   notes?: string;
   receivedAt?: string;
 }
+
+// ── Inventory (Milestone 6) ───────────────────────────────────────────────────
+
+export type MovementType =
+  | 'PURCHASE_IN'
+  | 'SALE_OUT'
+  | 'ADJUSTMENT_IN'
+  | 'ADJUSTMENT_OUT'
+  | 'WASTAGE'
+  | 'TRANSFER_IN'
+  | 'TRANSFER_OUT'
+  | 'RETURN_IN'
+  | 'RETURN_OUT'
+  | 'OPENING_STOCK';
+
+export type MovementDirection = 'IN' | 'OUT';
+
+export interface InventoryMovement {
+  id: string;
+  productId: string;
+  rollId?: string | null;
+  movementType: MovementType;
+  direction: MovementDirection;
+  quantity: string;
+  unitId: string;
+  beforeQuantity?: string | null;
+  afterQuantity?: string | null;
+  referenceType: string;
+  referenceId?: string | null;
+  remarks?: string | null;
+  userId: string;
+  createdAt: string;
+  product?: { id: string; name: string; productCode: string };
+  roll?: { id: string; rollNumber: string; barcode?: string | null } | null;
+  unit?: { id: string; name: string; abbreviation: string };
+  user?: { id: string; username: string };
+}
+
+export interface RollSummaryItem {
+  id: string;
+  rollNumber: string;
+  barcode?: string | null;
+  status: RollStatus;
+  remainingLengthYard: string;
+  salePricePerYard?: string | null;
+  location?: string | null;
+}
+
+export type BarcodeLookupType = 'ROLL' | 'PRODUCT';
+
+export interface BarcodeLookupResult {
+  type: BarcodeLookupType;
+  blocked: boolean;
+  warning: boolean;
+  statusMessage: string | null;
+  roll?: {
+    id: string;
+    rollNumber: string;
+    barcode?: string | null;
+    status: RollStatus;
+    originalLengthYard: string;
+    remainingLengthYard: string;
+    salePricePerYard?: string | null;
+    location?: string | null;
+    product?: { id: string; name: string; productCode: string };
+    color?: { id: string; name: string; colorCode?: string | null } | null;
+    design?: { id: string; name: string; designCode?: string | null } | null;
+    batch?: { id: string; batchNumber: string } | null;
+  };
+  product?: {
+    id: string;
+    productCode: string;
+    name: string;
+    productType: ProductType;
+    retailPrice: string;
+    wholesalePrice: string;
+    status: ProductStatus;
+    category?: { id: string; name: string };
+    color?: { id: string; name: string; colorCode?: string | null } | null;
+    design?: { id: string; name: string; designCode?: string | null } | null;
+    availableRolls: RollSummaryItem[];
+  };
+}
+
+export interface StockSummaryItem {
+  productId: string;
+  productCode: string;
+  name: string;
+  productType: ProductType;
+  retailPrice: string;
+  wholesalePrice: string;
+  totalRolls: number;
+  rollCounts: Record<RollStatus, number>;
+  totalOriginalYard: string;
+  totalRemainingYard: string;
+}

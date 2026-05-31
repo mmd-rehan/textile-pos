@@ -11,12 +11,14 @@ import BrandsPage from './pages/catalog/BrandsPage';
 import CategoriesPage from './pages/catalog/CategoriesPage';
 import ProductForm from './pages/catalog/ProductForm';
 import ProductsPage from './pages/catalog/ProductsPage';
-import SuppliersPage from './pages/purchases/SuppliersPage';
-import PurchaseCreatePage from './pages/purchases/PurchaseCreatePage';
-import PurchaseListPage from './pages/purchases/PurchaseListPage';
-import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
-import RollListPage from './pages/inventory/RollListPage';
+import BarcodeLookupPage from './pages/inventory/BarcodeLookupPage';
+import MovementsPage from './pages/inventory/MovementsPage';
 import RollDetailPage from './pages/inventory/RollDetailPage';
+import RollListPage from './pages/inventory/RollListPage';
+import PurchaseCreatePage from './pages/purchases/PurchaseCreatePage';
+import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
+import PurchaseListPage from './pages/purchases/PurchaseListPage';
+import SuppliersPage from './pages/purchases/SuppliersPage';
 
 function App() {
   return (
@@ -140,7 +142,7 @@ function App() {
             }
           />
 
-          {/* Inventory rolls */}
+          {/* Inventory */}
           <Route
             path="inventory/rolls"
             element={
@@ -154,6 +156,22 @@ function App() {
             element={
               <ProtectedRoute permission="read:inventory">
                 <RollDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="inventory/movements"
+            element={
+              <ProtectedRoute permission="read:inventory">
+                <MovementsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="inventory/barcode-lookup"
+            element={
+              <ProtectedRoute permission="read:inventory">
+                <BarcodeLookupPage />
               </ProtectedRoute>
             }
           />
