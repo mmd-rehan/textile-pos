@@ -46,3 +46,20 @@ Currency rules:
 12. Purchase currency support must not break roll costing, supplier ledger, reports, or future accounting.
 13. Use Decimal-safe handling for all currency amounts and exchange rates.
 14. Do not implement advanced foreign exchange gain/loss accounting yet unless explicitly requested later.
+
+Supplier purchase payment rules:
+1. Purchase creation may include an initial payment.
+2. If purchase is partially paid or unpaid, the system must support recording later supplier payments.
+3. Supplier payments must create supplier payment records and supplier ledger entries.
+4. Purchase payment status must be recalculated after payment.
+5. Supplier ledger entries must be append-only.
+6. Supplier payments must be transaction-safe and audit logged.
+7. For v1, supplier payment can be linked directly to one purchase.
+8. Do not implement complex multi-purchase payment allocation unless explicitly requested later.
+
+Catalog master data rules:
+1. If a form uses dropdown values such as color, design, brand, category, batch, or unit, the admin area must provide a way to manage those values.
+2. Product colors and product designs are master data.
+3. Purchase forms may support quick-create for color/design to avoid blocking the workflow.
+4. Dropdowns should use active records only.
+5. Do not hardcode color/design values in frontend.

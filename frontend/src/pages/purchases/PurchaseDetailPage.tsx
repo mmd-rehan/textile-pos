@@ -1,10 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Barcode, Package } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Banknote, Barcode, CreditCard, Package, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { purchasesApi } from '../../api/purchases';
 import Badge from '../../components/ui/Badge';
-import { formatAmount, GLOBAL_SALE_CURRENCY, getCurrency } from '../../constants/currencies';
-import type { InvoiceStatus } from '../../types';
+import Button from '../../components/ui/Button';
+import Modal from '../../components/ui/Modal';
+import { formatAmount, getCurrency, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { useAppStore } from '../../store/useAppStore';
+import type { InvoiceStatus, SupplierPayment } from '../../types';
 
 const STATUS_BADGE: Record<InvoiceStatus, { label: string; variant: 'green' | 'yellow' | 'red' | 'gray' | 'blue' | 'purple' }> = {
   PAID: { label: 'Paid', variant: 'green' },
@@ -23,18 +27,65 @@ const ROLL_STATUS_BADGE: Record<string, { label: string; variant: 'green' | 'yel
   DAMAGED: { label: 'Damaged', variant: 'red' },
 };
 
+const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'Cheque', 'Online Transfer', 'Other'];
+
 function fmtQty(n: string | number) {
   return parseFloat(String(n)).toFixed(2);
+}
+
+interface PaymentForm {
+  amount: string;
+  paymentMethod: string;
+  paymentDate: string;
+  notes: string;
 }
 
 export default function PurchaseDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { showNotification } = useAppStore();
+  const qc = useQueryClient();
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState<PaymentForm>({
+    amount: '',
+    paymentMethod: 'Cash',
+    paymentDate: new Date().toISOString().slice(0, 10),
+    notes: '',
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['purchase', id],
     queryFn: () => purchasesApi.getOne(id!),
     enabled: !!id,
+  });
+
+  const { data: paymentsData } = useQuery({
+    queryKey: ['purchase-payments', id],
+    queryFn: () => purchasesApi.getPayments(id!),
+    enabled: !!id,
+  });
+
+  const payments: SupplierPayment[] = paymentsData?.data ?? [];
+
+  const recordPayment = useMutation({
+    mutationFn: () =>
+      purchasesApi.createPayment(id!, {
+        amount: parseFloat(paymentForm.amount),
+        paymentMethod: paymentForm.paymentMethod,
+        paymentDate: paymentForm.paymentDate,
+        notes: paymentForm.notes || undefined,
+      }),
+    onSuccess: (res) => {
+      showNotification('Payment recorded successfully.', 'success');
+      qc.invalidateQueries({ queryKey: ['purchase', id] });
+      qc.invalidateQueries({ queryKey: ['purchase-payments', id] });
+      qc.invalidateQueries({ queryKey: ['purchases'] });
+      setPaymentModalOpen(false);
+      setPaymentForm({ amount: '', paymentMethod: 'Cash', paymentDate: new Date().toISOString().slice(0, 10), notes: '' });
+    },
+    onError: (err: any) => {
+      showNotification(err?.message ?? 'Failed to record payment.', 'error');
+    },
   });
 
   const po = data?.data;
@@ -59,6 +110,24 @@ export default function PurchaseDetailPage() {
   const buyCcy = getCurrency(po.purchaseCurrencyCode);
   const baseCcy = getCurrency(GLOBAL_SALE_CURRENCY);
   const rate = parseFloat(po.exchangeRateToBaseCurrency);
+
+  const paid = parseFloat(po.paidAmountOriginalCurrency ?? '0');
+  const due = parseFloat(po.dueAmountOriginalCurrency ?? '0');
+  const hasDue = due > 0 && po.status !== 'PAID';
+
+  function handlePaymentSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const amt = parseFloat(paymentForm.amount);
+    if (!amt || amt <= 0) {
+      showNotification('Payment amount must be greater than zero.', 'error');
+      return;
+    }
+    if (amt > due) {
+      showNotification(`Amount exceeds due amount of ${due.toFixed(2)} ${po!.purchaseCurrencyCode}.`, 'error');
+      return;
+    }
+    recordPayment.mutate();
+  }
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -85,35 +154,87 @@ export default function PurchaseDetailPage() {
             )}
           </p>
         </div>
+        {hasDue && (
+          <Button onClick={() => setPaymentModalOpen(true)}>
+            <Plus className="w-4 h-4" /> Record Payment
+          </Button>
+        )}
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Payment summary */}
+      <div className="grid grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
             Total ({po.purchaseCurrencyCode})
-            {isForeign && (
-              <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{po.purchaseCurrencyCode}</span>
-            )}
           </p>
-          <p className="text-2xl font-bold text-gray-900 mt-1 font-mono">
+          <p className="text-xl font-bold text-gray-900 mt-1 font-mono">
             {formatAmount(po.totalOriginalCurrency, po.purchaseCurrencyCode)}
           </p>
           {isForeign && (
             <p className="mt-0.5 text-xs text-gray-500 font-mono">
-              ≈ {formatAmount(po.totalBaseCurrency, GLOBAL_SALE_CURRENCY)} {baseCcy.code}
+              ≈ {formatAmount(po.totalBaseCurrency, GLOBAL_SALE_CURRENCY)}
             </p>
           )}
         </div>
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Rolls Created</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{po.purchaseRolls?.length ?? po._count?.purchaseRolls ?? 0}</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Paid ({po.purchaseCurrencyCode})
+          </p>
+          <p className="text-xl font-bold text-green-700 mt-1 font-mono">
+            {formatAmount(po.paidAmountOriginalCurrency, po.purchaseCurrencyCode)}
+          </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Products</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{po.purchaseItems?.length ?? 0}</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Due ({po.purchaseCurrencyCode})
+          </p>
+          <p className={`text-xl font-bold mt-1 font-mono ${due > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+            {formatAmount(po.dueAmountOriginalCurrency, po.purchaseCurrencyCode)}
+          </p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Rolls Created</p>
+          <p className="text-xl font-bold text-gray-900 mt-1">{po.purchaseRolls?.length ?? po._count?.purchaseRolls ?? 0}</p>
         </div>
       </div>
+
+      {/* Payment history */}
+      {payments.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div className="p-4 border-b border-gray-200 flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-gray-500" />
+            <h2 className="font-semibold text-gray-800">Payment History</h2>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+              <tr>
+                <th className="px-4 py-3 text-left">Date</th>
+                <th className="px-4 py-3 text-left">Method</th>
+                <th className="px-4 py-3 text-right">Amount ({po.purchaseCurrencyCode})</th>
+                {isForeign && <th className="px-4 py-3 text-right">Amount ({GLOBAL_SALE_CURRENCY})</th>}
+                <th className="px-4 py-3 text-left">Notes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {payments.map((p) => (
+                <tr key={p.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-gray-700">{new Date(p.paymentDate).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-700">{p.paymentMethod}</td>
+                  <td className="px-4 py-3 text-right font-mono font-medium text-gray-900">
+                    {formatAmount(p.amountOriginalCurrency, p.currencyCode)}
+                  </td>
+                  {isForeign && (
+                    <td className="px-4 py-3 text-right font-mono text-gray-400 text-xs">
+                      {formatAmount(p.amountBaseCurrency, GLOBAL_SALE_CURRENCY)}
+                    </td>
+                  )}
+                  <td className="px-4 py-3 text-gray-500 text-xs">{p.notes ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Rolls */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -245,6 +366,89 @@ export default function PurchaseDetailPage() {
           <p className="text-sm text-gray-600">{po.notes}</p>
         </div>
       )}
+
+      {/* Record Payment Modal */}
+      <Modal
+        open={paymentModalOpen}
+        onClose={() => setPaymentModalOpen(false)}
+        title="Record Payment"
+      >
+        <form onSubmit={handlePaymentSubmit} className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+            <p className="font-semibold">Due: {formatAmount(po.dueAmountOriginalCurrency, po.purchaseCurrencyCode)}</p>
+            <p className="text-xs mt-0.5">Supplier: {po.supplier?.name}</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Amount ({po.purchaseCurrencyCode}) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              max={due}
+              value={paymentForm.amount}
+              onChange={(e) => setPaymentForm((f) => ({ ...f, amount: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder={`0.00 (max ${due.toFixed(2)})`}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+              <select
+                value={paymentForm.paymentMethod}
+                onChange={(e) => setPaymentForm((f) => ({ ...f, paymentMethod: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date</label>
+              <input
+                type="date"
+                value={paymentForm.paymentDate}
+                onChange={(e) => setPaymentForm((f) => ({ ...f, paymentDate: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <input
+              type="text"
+              value={paymentForm.notes}
+              onChange={(e) => setPaymentForm((f) => ({ ...f, notes: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Optional notes…"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setPaymentModalOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={recordPayment.isPending}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              <Banknote className="w-4 h-4" />
+              {recordPayment.isPending ? 'Recording…' : 'Record Payment'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

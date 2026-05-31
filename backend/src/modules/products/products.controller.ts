@@ -1,10 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
-import { AddProductColorDto, CreateColorDto } from './dto/manage-product-color.dto';
-import { AddProductDesignDto, CreateDesignDto } from './dto/manage-product-design.dto';
+import { AddProductColorDto, CreateColorDto, UpdateColorDto } from './dto/manage-product-color.dto';
+import { AddProductDesignDto, CreateDesignDto, UpdateDesignDto } from './dto/manage-product-design.dto';
 import { createSuccessResponse } from '../../common/utils/response';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -99,8 +99,15 @@ export class ColorsController {
 
   @Get()
   @RequirePermissions('read:products')
-  async findAll(@Query('search') search?: string) {
-    const data = await this.productsService.findAllColors(search);
+  async findAll(@Query('search') search?: string, @Query('activeOnly') activeOnly?: string) {
+    const data = await this.productsService.findAllColors(search, activeOnly === 'true');
+    return createSuccessResponse(data);
+  }
+
+  @Get(':id')
+  @RequirePermissions('read:products')
+  async findOne(@Param('id') id: string) {
+    const data = await this.productsService.findColorById(id);
     return createSuccessResponse(data);
   }
 
@@ -108,6 +115,20 @@ export class ColorsController {
   @RequirePermissions('write:products')
   async create(@Body() dto: CreateColorDto) {
     const data = await this.productsService.createColor(dto);
+    return createSuccessResponse(data);
+  }
+
+  @Patch(':id')
+  @RequirePermissions('write:products')
+  async update(@Param('id') id: string, @Body() dto: UpdateColorDto) {
+    const data = await this.productsService.updateColor(id, dto);
+    return createSuccessResponse(data);
+  }
+
+  @Delete(':id')
+  @RequirePermissions('write:products')
+  async remove(@Param('id') id: string) {
+    const data = await this.productsService.deleteColor(id);
     return createSuccessResponse(data);
   }
 }
@@ -119,8 +140,15 @@ export class DesignsController {
 
   @Get()
   @RequirePermissions('read:products')
-  async findAll(@Query('search') search?: string) {
-    const data = await this.productsService.findAllDesigns(search);
+  async findAll(@Query('search') search?: string, @Query('activeOnly') activeOnly?: string) {
+    const data = await this.productsService.findAllDesigns(search, activeOnly === 'true');
+    return createSuccessResponse(data);
+  }
+
+  @Get(':id')
+  @RequirePermissions('read:products')
+  async findOne(@Param('id') id: string) {
+    const data = await this.productsService.findDesignById(id);
     return createSuccessResponse(data);
   }
 
@@ -128,6 +156,20 @@ export class DesignsController {
   @RequirePermissions('write:products')
   async create(@Body() dto: CreateDesignDto) {
     const data = await this.productsService.createDesign(dto);
+    return createSuccessResponse(data);
+  }
+
+  @Patch(':id')
+  @RequirePermissions('write:products')
+  async update(@Param('id') id: string, @Body() dto: UpdateDesignDto) {
+    const data = await this.productsService.updateDesign(id, dto);
+    return createSuccessResponse(data);
+  }
+
+  @Delete(':id')
+  @RequirePermissions('write:products')
+  async remove(@Param('id') id: string) {
+    const data = await this.productsService.deleteDesign(id);
     return createSuccessResponse(data);
   }
 }

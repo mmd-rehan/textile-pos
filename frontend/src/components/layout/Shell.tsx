@@ -10,7 +10,9 @@ import {
   LogOut,
   Menu,
   Package,
+  Palette,
   ScrollText,
+  Shapes,
   ShoppingCart,
   Tag,
   Truck,
@@ -51,6 +53,8 @@ const catalogLinks: NavItem[] = [
   { name: 'Products', href: '/catalog/products', icon: Tag, permission: 'read:products' },
   { name: 'Categories', href: '/catalog/categories', icon: Layers, permission: 'read:products' },
   { name: 'Brands', href: '/catalog/brands', icon: Award, permission: 'read:products' },
+  { name: 'Colors', href: '/catalog/colors', icon: Palette, permission: 'read:products' },
+  { name: 'Designs', href: '/catalog/designs', icon: Shapes, permission: 'read:products' },
   { name: 'Batches', href: '/catalog/batches', icon: Archive, permission: 'read:inventory' },
 ];
 

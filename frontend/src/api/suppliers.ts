@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { Supplier } from '../types';
+import type { Supplier, SupplierLedgerEntry } from '../types';
 
 export interface SupplierQuery {
   page?: number;
@@ -37,4 +37,7 @@ export const suppliersApi = {
 
   remove: (id: string): Promise<{ data: { id: string } }> =>
     apiClient.delete(`/suppliers/${id}`),
+
+  getLedger: (supplierId: string, params: { page?: number; limit?: number } = {}): Promise<{ data: SupplierLedgerEntry[]; meta: any }> =>
+    apiClient.get(`/suppliers/${supplierId}/ledger`, { params }),
 };

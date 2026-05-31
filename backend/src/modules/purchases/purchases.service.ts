@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
-import { PrismaService } from '../../database/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
+import { PrismaService } from '../../database/prisma.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
+import { CreateSupplierPaymentDto } from './dto/create-supplier-payment.dto';
 import { QueryPurchaseDto } from './dto/query-purchase.dto';
 
 export const BASE_CURRENCY_CODE = 'PKR';
@@ -42,7 +43,7 @@ const PO_INCLUDE = {
 
 @Injectable()
 export class PurchasesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async findAll(query: QueryPurchaseDto) {
     const page = query.page ?? 1;
@@ -171,6 +172,8 @@ export class PurchasesService {
 
       // ── Create PurchaseOrder ──────────────────────────────────────────────
       const poNumber = await this.generatePoNumber(tx);
+      const paidBase = paidAmountOriginal.times(exchangeRate).toDecimalPlaces(2);
+      const dueOriginal = payableOriginal.lte(0) ? new Prisma.Decimal(0) : payableOriginal;
       const po = await tx.purchaseOrder.create({
         data: {
           poNumber,
@@ -181,12 +184,15 @@ export class PurchasesService {
           totalOriginalCurrency: totalOriginal,
           subtotalBaseCurrency: subtotalBase,
           totalBaseCurrency: totalBase,
+          paidAmountOriginalCurrency: paidAmountOriginal.toDecimalPlaces(2),
+          dueAmountOriginalCurrency: dueOriginal.toDecimalPlaces(2),
           status,
           orderDate: dto.orderDate ? new Date(dto.orderDate) : new Date(),
           deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
           notes: dto.notes,
         },
       });
+      void paidBase; // stored on PO for reference; ledger uses base amounts
 
       // ── Create Rolls + PurchaseRolls + InventoryMovements ────────────────
       for (let i = 0; i < rollsData.length; i++) {
@@ -348,6 +354,120 @@ export class PurchasesService {
     });
 
     return this.prisma.purchaseOrder.findUnique({ where: { id: createdPoId! }, include: PO_INCLUDE });
+  }
+
+  async getPayments(purchaseId: string) {
+    const po = await this.prisma.purchaseOrder.findUnique({ where: { id: purchaseId } });
+    if (!po) throw AppError.notFound('Purchase order not found', 'PO_NOT_FOUND');
+    return this.prisma.supplierPayment.findMany({
+      where: { purchaseOrderId: purchaseId },
+      orderBy: { paymentDate: 'desc' },
+    });
+  }
+
+  async createPayment(purchaseId: string, dto: CreateSupplierPaymentDto, userId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const po = await tx.purchaseOrder.findUnique({ where: { id: purchaseId } });
+      if (!po) throw AppError.notFound('Purchase order not found', 'PO_NOT_FOUND');
+      if (po.status === InvoiceStatus.PAID) {
+        throw AppError.badRequest('Purchase order is already fully paid', 'PO_ALREADY_PAID');
+      }
+
+      const paymentAmount = new Prisma.Decimal(dto.amount);
+      const currentDue = new Prisma.Decimal(po.dueAmountOriginalCurrency.toString());
+
+      if (paymentAmount.lte(0)) {
+        throw AppError.badRequest('Payment amount must be greater than zero', 'INVALID_PAYMENT_AMOUNT');
+      }
+      if (paymentAmount.gt(currentDue)) {
+        throw AppError.badRequest(
+          `Payment amount exceeds due amount of ${currentDue.toFixed(2)} ${po.purchaseCurrencyCode}`,
+          'PAYMENT_EXCEEDS_DUE',
+        );
+      }
+
+      const exchangeRate = new Prisma.Decimal(po.exchangeRateToBaseCurrency.toString());
+      const amountBase = paymentAmount.times(exchangeRate).toDecimalPlaces(2);
+
+      // Create payment record
+      await tx.supplierPayment.create({
+        data: {
+          purchaseOrderId: purchaseId,
+          supplierId: po.supplierId,
+          amountOriginalCurrency: paymentAmount.toDecimalPlaces(2),
+          amountBaseCurrency: amountBase,
+          currencyCode: po.purchaseCurrencyCode,
+          exchangeRateToBaseCurrency: exchangeRate,
+          paymentMethod: dto.paymentMethod,
+          paymentDate: new Date(dto.paymentDate),
+          notes: dto.notes,
+        },
+      });
+
+      // Update PO paid/due amounts and status
+      const newPaid = new Prisma.Decimal(po.paidAmountOriginalCurrency.toString()).plus(paymentAmount);
+      const newDue = currentDue.minus(paymentAmount).toDecimalPlaces(2);
+      let newStatus: InvoiceStatus;
+      if (newDue.lte(0)) newStatus = InvoiceStatus.PAID;
+      else newStatus = InvoiceStatus.PARTIALLY_PAID;
+
+      await tx.purchaseOrder.update({
+        where: { id: purchaseId },
+        data: {
+          paidAmountOriginalCurrency: newPaid.toDecimalPlaces(2),
+          dueAmountOriginalCurrency: newDue.lt(0) ? new Prisma.Decimal(0) : newDue,
+          status: newStatus,
+        },
+      });
+
+      // Supplier ledger entry: debit (payment reduces liability)
+      const supplier = await tx.supplier.findUnique({ where: { id: po.supplierId } });
+      if (!supplier) throw AppError.notFound('Supplier not found', 'SUPPLIER_NOT_FOUND');
+      const prevBalance = new Prisma.Decimal(supplier.currentBalance.toString());
+      const newBalance = prevBalance.minus(amountBase).toDecimalPlaces(2);
+
+      await tx.supplierLedgerEntry.create({
+        data: {
+          supplierId: po.supplierId,
+          currencyCode: po.purchaseCurrencyCode,
+          debitOriginalCurrency: paymentAmount.toDecimalPlaces(2),
+          creditOriginalCurrency: new Prisma.Decimal(0),
+          exchangeRateToBaseCurrency: exchangeRate,
+          debitBaseCurrency: amountBase,
+          creditBaseCurrency: new Prisma.Decimal(0),
+          balanceAfterBase: newBalance,
+          referenceType: 'SUPPLIER_PAYMENT',
+          referenceId: purchaseId,
+          remarks: `Payment for PO ${po.poNumber} via ${dto.paymentMethod}${dto.notes ? ` — ${dto.notes}` : ''}`,
+        },
+      });
+
+      await tx.supplier.update({
+        where: { id: po.supplierId },
+        data: { currentBalance: newBalance },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'SUPPLIER_PAYMENT_RECORDED',
+          tableName: 'supplier_payments',
+          recordId: purchaseId,
+          newValues: JSON.stringify({
+            purchaseOrderId: purchaseId,
+            poNumber: po.poNumber,
+            amount: paymentAmount.toString(),
+            currency: po.purchaseCurrencyCode,
+            amountBase: amountBase.toString(),
+            paymentMethod: dto.paymentMethod,
+            paymentDate: dto.paymentDate,
+            newStatus,
+          }),
+        },
+      });
+    });
+
+    return this.findOne(purchaseId);
   }
 
   private generateRollNumber(): string {

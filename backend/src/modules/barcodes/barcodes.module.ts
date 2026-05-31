@@ -6,4 +6,4 @@ import { BarcodesService } from './barcodes.service';
   controllers: [BarcodesController],
   providers: [BarcodesService],
 })
-export class BarcodesModule {}
+export class BarcodesModule { }

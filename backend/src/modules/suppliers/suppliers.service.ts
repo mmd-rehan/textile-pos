@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -107,5 +108,25 @@ export class SuppliersService {
     }
     await this.prisma.supplier.delete({ where: { id } });
     return { id };
+  }
+
+  async getLedger(supplierId: string, query: PaginationDto) {
+    await this.findOne(supplierId);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.SupplierLedgerEntryWhereInput = { supplierId };
+    const [data, total] = await Promise.all([
+      this.prisma.supplierLedgerEntry.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.supplierLedgerEntry.count({ where }),
+    ]);
+
+    return createPaginatedResponse(data, total, page, limit);
   }
 }

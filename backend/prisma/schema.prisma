@@ -291,6 +291,8 @@ model Color {
   id        String   @id @default(uuid())
   name      String   @unique
   colorCode String?  @map("color_code")
+  hexCode   String?  @map("hex_code")
+  isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -304,11 +306,13 @@ model Color {
 
 // Global design/pattern catalog shared across products and rolls
 model Design {
-  id         String   @id @default(uuid())
-  name       String   @unique
-  designCode String?  @map("design_code")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  name        String   @unique
+  designCode  String?  @map("design_code")
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   products       Product[]
   productDesigns ProductDesign[]
@@ -680,6 +684,7 @@ model Supplier {
   batches               Batch[]
   purchaseOrders        PurchaseOrder[]
   supplierLedgerEntries SupplierLedgerEntry[]
+  supplierPayments      SupplierPayment[]
 
   @@map("suppliers")
 }
@@ -698,6 +703,8 @@ model PurchaseOrder {
   discountBaseCurrency       Decimal       @db.Decimal(14, 2) @default(0.00) @map("discount_base_ccy")
   taxBaseCurrency            Decimal       @db.Decimal(14, 2) @default(0.00) @map("tax_base_ccy")
   totalBaseCurrency          Decimal       @db.Decimal(14, 2) @map("total_base_ccy")
+  paidAmountOriginalCurrency Decimal       @db.Decimal(14, 2) @default(0.00) @map("paid_amount_original_ccy")
+  dueAmountOriginalCurrency  Decimal       @db.Decimal(14, 2) @default(0.00) @map("due_amount_original_ccy")
   status                     InvoiceStatus @default(DRAFT)
   orderDate                  DateTime      @default(now()) @map("order_date")
   deliveryDate               DateTime?     @map("delivery_date")
@@ -705,12 +712,35 @@ model PurchaseOrder {
   createdAt                  DateTime      @default(now()) @map("created_at")
   updatedAt                  DateTime      @updatedAt @map("updated_at")
 
-  supplier      Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  purchaseItems PurchaseItem[]
-  purchaseRolls PurchaseRoll[]
+  supplier         Supplier          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseItems    PurchaseItem[]
+  purchaseRolls    PurchaseRoll[]
+  supplierPayments SupplierPayment[]
 
   @@index([poNumber])
   @@map("purchase_orders")
+}
+
+model SupplierPayment {
+  id                         String   @id @default(uuid())
+  purchaseOrderId            String   @map("purchase_order_id")
+  supplierId                 String   @map("supplier_id")
+  amountOriginalCurrency     Decimal  @db.Decimal(14, 2) @map("amount_original_ccy")
+  amountBaseCurrency         Decimal  @db.Decimal(14, 2) @map("amount_base_ccy")
+  currencyCode               String   @map("currency_code")
+  exchangeRateToBaseCurrency Decimal  @db.Decimal(18, 6) @default(1.000000) @map("exchange_rate_to_base_currency")
+  paymentMethod              String   @map("payment_method")
+  paymentDate                DateTime @map("payment_date")
+  notes                      String?  @db.Text
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseOrderId])
+  @@index([supplierId])
+  @@map("supplier_payments")
 }
 
 model PurchaseItem {

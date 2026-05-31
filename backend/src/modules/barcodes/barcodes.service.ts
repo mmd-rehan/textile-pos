@@ -8,7 +8,7 @@ const WARNING_STATUSES: RollStatus[] = ['WASTED'];
 
 @Injectable()
 export class BarcodesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async lookup(barcode: string) {
     // 1. Check rolls first

@@ -50,7 +50,7 @@ export function useDeleteProduct() {
 export function useColors(search?: string) {
   return useQuery({
     queryKey: [...COLORS_KEY, search],
-    queryFn: () => colorsApi.getAll(search),
+    queryFn: () => colorsApi.getAll({ search }),
     select: (res) => res.data,
   });
 }
@@ -66,7 +66,7 @@ export function useCreateColor() {
 export function useDesigns(search?: string) {
   return useQuery({
     queryKey: [...DESIGNS_KEY, search],
-    queryFn: () => designsApi.getAll(search),
+    queryFn: () => designsApi.getAll({ search }),
     select: (res) => res.data,
   });
 }

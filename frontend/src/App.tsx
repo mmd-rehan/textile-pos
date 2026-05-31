@@ -9,6 +9,8 @@ import SalesHistory from './pages/SalesHistory';
 import BatchesPage from './pages/catalog/BatchesPage';
 import BrandsPage from './pages/catalog/BrandsPage';
 import CategoriesPage from './pages/catalog/CategoriesPage';
+import ColorsPage from './pages/catalog/ColorsPage';
+import DesignsPage from './pages/catalog/DesignsPage';
 import ProductForm from './pages/catalog/ProductForm';
 import ProductsPage from './pages/catalog/ProductsPage';
 import BarcodeLookupPage from './pages/inventory/BarcodeLookupPage';
@@ -96,6 +98,22 @@ function App() {
             element={
               <ProtectedRoute permission="read:products">
                 <BrandsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="catalog/colors"
+            element={
+              <ProtectedRoute permission="read:products">
+                <ColorsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="catalog/designs"
+            element={
+              <ProtectedRoute permission="read:products">
+                <DesignsPage />
               </ProtectedRoute>
             }
           />
