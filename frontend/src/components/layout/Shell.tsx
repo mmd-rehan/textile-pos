@@ -9,8 +9,11 @@ import {
   LogOut,
   Menu,
   Package,
+  ScrollText,
   ShoppingCart,
   Tag,
+  Truck,
+  Users,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -28,8 +31,18 @@ interface NavItem {
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'New Sale', href: '/sales/new', icon: ShoppingCart, permission: 'write:sales' },
-  { name: 'Inventory', href: '/inventory', icon: Package, permission: 'read:inventory' },
   { name: 'Sales History', href: '/sales/history', icon: History, permission: 'read:sales' },
+];
+
+const purchaseLinks: NavItem[] = [
+  { name: 'Purchase History', href: '/purchases', icon: ScrollText, permission: 'read:purchases' },
+  { name: 'New Purchase', href: '/purchases/new', icon: Package, permission: 'write:purchases' },
+  { name: 'Suppliers', href: '/purchases/suppliers', icon: Users, permission: 'read:purchases' },
+];
+
+const inventoryLinks: NavItem[] = [
+  { name: 'Rolls', href: '/inventory/rolls', icon: Archive, permission: 'read:inventory' },
+  { name: 'Movements', href: '/inventory', icon: Truck, permission: 'read:inventory' },
 ];
 
 const catalogLinks: NavItem[] = [
@@ -45,14 +58,22 @@ export default function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
   const [catalogOpen, setCatalogOpen] = useState(location.pathname.startsWith('/catalog'));
+  const [purchasesOpen, setPurchasesOpen] = useState(location.pathname.startsWith('/purchases'));
+  const [inventoryOpen, setInventoryOpen] = useState(location.pathname.startsWith('/inventory'));
 
   const isCatalog = location.pathname.startsWith('/catalog');
+  const isPurchases = location.pathname.startsWith('/purchases');
+  const isInventory = location.pathname.startsWith('/inventory');
 
   const permissions = user?.permissions ?? [];
   const can = (p: string) => permissions.includes(p);
 
   const visibleNav = navigation.filter((item) => !item.permission || can(item.permission));
+  const visiblePurchases = purchaseLinks.filter((item) => !item.permission || can(item.permission));
+  const visibleInventory = inventoryLinks.filter((item) => !item.permission || can(item.permission));
   const visibleCatalog = catalogLinks.filter((item) => !item.permission || can(item.permission));
+  const showPurchasesSection = visiblePurchases.length > 0;
+  const showInventorySection = visibleInventory.length > 0;
   const showCatalogSection = visibleCatalog.length > 0;
 
   const handleLogout = async () => {
@@ -101,6 +122,110 @@ export default function Shell() {
               </Link>
             );
           })}
+
+          {/* Purchases section */}
+          {showPurchasesSection && (
+            <div className="pt-2">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => setPurchasesOpen((o) => !o)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-colors ${isPurchases
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Truck className="w-5 h-5 shrink-0" />
+                    <span>Purchases</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${purchasesOpen ? 'rotate-180' : ''}`} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate('/purchases')}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg font-medium transition-colors w-full ${isPurchases
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                >
+                  <Truck className="w-5 h-5 shrink-0" />
+                </button>
+              )}
+              {sidebarOpen && purchasesOpen && (
+                <div className="ml-8 mt-1 space-y-0.5">
+                  {visiblePurchases.map((item) => {
+                    const isActive = location.pathname === item.href;
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive
+                          ? 'text-primary-600 bg-primary-50'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Inventory section */}
+          {showInventorySection && (
+            <div className="pt-2">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => setInventoryOpen((o) => !o)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-colors ${isInventory
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Package className="w-5 h-5 shrink-0" />
+                    <span>Inventory</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${inventoryOpen ? 'rotate-180' : ''}`} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate('/inventory/rolls')}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg font-medium transition-colors w-full ${isInventory
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                >
+                  <Package className="w-5 h-5 shrink-0" />
+                </button>
+              )}
+              {sidebarOpen && inventoryOpen && (
+                <div className="ml-8 mt-1 space-y-0.5">
+                  {visibleInventory.map((item) => {
+                    const isActive = location.pathname === item.href;
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive
+                          ? 'text-primary-600 bg-primary-50'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Catalog section */}
           {showCatalogSection && (

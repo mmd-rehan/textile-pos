@@ -105,7 +105,31 @@ async function main() {
   console.log(`✅ Seeded ${rolePermissionCount} role-permission mappings.`);
 
   // ==========================================
-  // 4. SEED MEASUREMENT UNITS
+  // 4. SEED CURRENCIES
+  // ==========================================
+  console.log('💱 Seeding currencies...');
+  const currencies = [
+    { code: 'PKR', name: 'Pakistani Rupee',  symbol: '₨',   isBaseCurrency: true  },
+    { code: 'AED', name: 'UAE Dirham',       symbol: 'د.إ', isBaseCurrency: false },
+    { code: 'USD', name: 'US Dollar',        symbol: '$',   isBaseCurrency: false },
+    { code: 'EUR', name: 'Euro',             symbol: '€',   isBaseCurrency: false },
+    { code: 'GBP', name: 'British Pound',    symbol: '£',   isBaseCurrency: false },
+    { code: 'SAR', name: 'Saudi Riyal',      symbol: '﷼',  isBaseCurrency: false },
+    { code: 'INR', name: 'Indian Rupee',     symbol: '₹',   isBaseCurrency: false },
+    { code: 'CNY', name: 'Chinese Yuan',     symbol: '¥',   isBaseCurrency: false },
+    { code: 'TRY', name: 'Turkish Lira',     symbol: '₺',   isBaseCurrency: false },
+  ];
+  for (const c of currencies) {
+    await prisma.currency.upsert({
+      where: { code: c.code },
+      update: { name: c.name, symbol: c.symbol, isBaseCurrency: c.isBaseCurrency },
+      create: c,
+    });
+  }
+  console.log(`✅ Seeded ${currencies.length} currencies (base: PKR).`);
+
+  // ==========================================
+  // 5. SEED MEASUREMENT UNITS
   // ==========================================
   console.log('📐 Seeding units...');
   const units = [
@@ -126,7 +150,7 @@ async function main() {
   console.log(`✅ Seeded ${unitMap.size} units.`);
 
   // ==========================================
-  // 5. SEED UNIT CONVERSIONS
+  // 6. SEED UNIT CONVERSIONS
   // ==========================================
   console.log('🔄 Seeding unit conversions...');
   const yardId = unitMap.get('yd');
@@ -153,12 +177,12 @@ async function main() {
   }
 
   // ==========================================
-  // 6. SEED DEFAULT COMPANY SETTINGS
+  // 7. SEED DEFAULT COMPANY SETTINGS
   // ==========================================
   console.log('🏢 Seeding company settings...');
   const companySettings = [
     { key: 'company_name', value: 'Textile POS & ERP Ltd.', description: 'Official registered company name' },
-    { key: 'company_currency', value: 'AED', description: 'Primary trading currency' },
+    { key: 'company_currency', value: 'PKR', description: 'Base/primary currency for sales and internal accounting' },
     { key: 'company_timezone', value: 'Asia/Dubai', description: 'System base timezone for operations' },
     { key: 'company_tax_rate', value: '5.00', description: 'Standard VAT tax rate percentage' },
   ];
@@ -173,7 +197,7 @@ async function main() {
   console.log(`✅ Seeded ${companySettings.length} company settings.`);
 
   // ==========================================
-  // 7. SEED DEFAULT USERS
+  // 8. SEED DEFAULT USERS
   // ==========================================
   console.log('👤 Seeding default users...');
 
