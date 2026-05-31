@@ -1,47 +1,42 @@
-import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { UserStatus } from '@prisma/client';
 import { UsersService } from './users.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 
 @Controller('users')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  async create(@Body() body: { email: string; name: string; roleId?: string }) {
-    const user = await this.usersService.create(body);
-    return {
-      data: user,
-    };
+  @RequirePermissions('write:users')
+  async create(@Body() body: { username: string; email: string; password: string; roleIds?: string[] }) {
+    return this.usersService.create(body);
   }
 
   @Get()
+  @RequirePermissions('read:users')
   async findAll() {
-    const users = await this.usersService.findAll();
-    return {
-      data: users,
-    };
+    return this.usersService.findAll();
   }
 
   @Get(':id')
+  @RequirePermissions('read:users')
   async findOne(@Param('id') id: string) {
-    const user = await this.usersService.findOne(id);
-    return {
-      data: user,
-    };
+    return this.usersService.findOne(id);
   }
 
   @Put(':id')
-  async update(@Param('id') id: string, @Body() body: { name?: string; roleId?: string; isActive?: boolean }) {
-    const user = await this.usersService.update(id, body);
-    return {
-      data: user,
-    };
+  @RequirePermissions('write:users')
+  async update(@Param('id') id: string, @Body() body: { email?: string; status?: UserStatus }) {
+    return this.usersService.update(id, body);
   }
 
   @Delete(':id')
+  @RequirePermissions('write:users')
   async remove(@Param('id') id: string) {
-    const result = await this.usersService.remove(id);
-    return {
-      data: result,
-    };
+    return this.usersService.remove(id);
   }
 }
