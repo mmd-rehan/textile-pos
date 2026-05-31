@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, RollStatus } from '@prisma/client';
-import { PrismaService } from '../../database/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
+import { PrismaService } from '../../database/prisma.service';
+import { QueryRollMovementsDto } from './dto/query-roll-movements.dto';
 import { QueryRollDto } from './dto/query-roll.dto';
 
 const ROLL_INCLUDE = {
@@ -29,7 +30,7 @@ const ROLL_INCLUDE = {
 
 @Injectable()
 export class RollsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async findAll(query: QueryRollDto) {
     const page = query.page ?? 1;
@@ -77,6 +78,35 @@ export class RollsService {
     });
     if (!roll) throw AppError.notFound('Roll not found', 'ROLL_NOT_FOUND');
     return roll;
+  }
+
+  async findMovements(id: string, query: QueryRollMovementsDto) {
+    const roll = await this.prisma.roll.findUnique({ where: { id }, select: { id: true } });
+    if (!roll) throw AppError.notFound('Roll not found', 'ROLL_NOT_FOUND');
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.InventoryMovementWhereInput = { rollId: id };
+    if (query.movementType) where.movementType = query.movementType as any;
+    if (query.direction) where.direction = query.direction as any;
+
+    const [data, total] = await Promise.all([
+      this.prisma.inventoryMovement.findMany({
+        where,
+        include: {
+          unit: { select: { id: true, name: true, abbreviation: true } },
+          user: { select: { id: true, username: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.inventoryMovement.count({ where }),
+    ]);
+
+    return createPaginatedResponse(data, total, page, limit);
   }
 
   async findByBarcode(barcode: string) {

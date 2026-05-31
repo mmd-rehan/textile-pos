@@ -1,6 +1,7 @@
 import {
   Archive,
   Award,
+  Barcode,
   Bell,
   ChevronDown,
   History,
@@ -42,7 +43,8 @@ const purchaseLinks: NavItem[] = [
 
 const inventoryLinks: NavItem[] = [
   { name: 'Rolls', href: '/inventory/rolls', icon: Archive, permission: 'read:inventory' },
-  { name: 'Movements', href: '/inventory', icon: Truck, permission: 'read:inventory' },
+  { name: 'Movements', href: '/inventory/movements', icon: Truck, permission: 'read:inventory' },
+  { name: 'Barcode Lookup', href: '/inventory/barcode-lookup', icon: Barcode, permission: 'read:inventory' },
 ];
 
 const catalogLinks: NavItem[] = [

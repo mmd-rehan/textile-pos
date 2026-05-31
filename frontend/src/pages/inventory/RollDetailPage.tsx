@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Barcode, Copy } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { inventoryApi } from '../../api/inventory';
 import { rollsApi } from '../../api/rolls';
 import Badge from '../../components/ui/Badge';
+import Pagination from '../../components/ui/Pagination';
 import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
 import { useAppStore } from '../../store/useAppStore';
 import type { RollStatus } from '../../types';
@@ -23,6 +26,7 @@ export default function RollDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showNotification } = useAppStore();
+  const [movPage, setMovPage] = useState(1);
 
   const { data, isLoading } = useQuery({
     queryKey: ['roll', id],
@@ -30,7 +34,15 @@ export default function RollDetailPage() {
     enabled: !!id,
   });
 
+  const { data: movData, isLoading: movLoading } = useQuery({
+    queryKey: ['roll-movements', id, movPage],
+    queryFn: () => inventoryApi.getRollMovements(id!, { page: movPage, limit: 20 }),
+    enabled: !!id,
+  });
+
   const roll = data?.data;
+  const movements = movData?.data ?? [];
+  const movMeta = movData?.meta;
 
   const copyBarcode = () => {
     if (roll?.barcode) {
@@ -168,39 +180,55 @@ export default function RollDetailPage() {
       </div>
 
       {/* Inventory movements */}
-      {roll.inventoryMovements && roll.inventoryMovements.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="font-semibold text-gray-800">Inventory Movements</h2>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-              <tr>
-                <th className="px-4 py-3 text-left">Type</th>
-                <th className="px-4 py-3 text-left">Direction</th>
-                <th className="px-4 py-3 text-right">Qty</th>
-                <th className="px-4 py-3 text-left">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {roll.inventoryMovements.map((m) => (
-                <tr key={m.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-700">{m.movementType}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant={m.direction === 'IN' ? 'green' : 'red'}>
-                      {m.direction}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-gray-700">
-                    {parseFloat(m.quantity).toFixed(2)} {m.unit.abbreviation}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{new Date(m.createdAt).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800">Inventory Movements</h2>
+          {movMeta && <span className="text-xs text-gray-400">{movMeta.total} total</span>}
         </div>
-      )}
+        {movLoading ? (
+          <div className="p-6 text-center text-gray-500 text-sm">Loading…</div>
+        ) : movements.length === 0 ? (
+          <div className="p-6 text-center text-gray-500 text-sm">No movements recorded</div>
+        ) : (
+          <>
+            <table className="w-full text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                <tr>
+                  <th className="px-4 py-3 text-left">Type</th>
+                  <th className="px-4 py-3 text-left">Direction</th>
+                  <th className="px-4 py-3 text-right">Qty</th>
+                  <th className="px-4 py-3 text-left">Reference</th>
+                  <th className="px-4 py-3 text-left">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {movements.map((m) => (
+                  <tr key={m.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-gray-700">{m.movementType}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant={m.direction === 'IN' ? 'green' : 'red'}>
+                        {m.direction}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-gray-700">
+                      {parseFloat(m.quantity).toFixed(2)} {m.unit?.abbreviation ?? ''}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs font-mono">
+                      {m.referenceType}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{new Date(m.createdAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {movMeta && movMeta.totalPages > 1 && (
+              <div className="px-4 border-t border-gray-200">
+                <Pagination page={movPage} totalPages={movMeta.totalPages} total={movMeta.total} limit={movMeta.limit} onPageChange={setMovPage} />
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
