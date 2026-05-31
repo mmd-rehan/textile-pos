@@ -11,6 +11,12 @@ import BrandsPage from './pages/catalog/BrandsPage';
 import CategoriesPage from './pages/catalog/CategoriesPage';
 import ProductForm from './pages/catalog/ProductForm';
 import ProductsPage from './pages/catalog/ProductsPage';
+import SuppliersPage from './pages/purchases/SuppliersPage';
+import PurchaseCreatePage from './pages/purchases/PurchaseCreatePage';
+import PurchaseListPage from './pages/purchases/PurchaseListPage';
+import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
+import RollListPage from './pages/inventory/RollListPage';
+import RollDetailPage from './pages/inventory/RollDetailPage';
 
 function App() {
   return (
@@ -99,6 +105,59 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Purchases */}
+          <Route
+            path="purchases"
+            element={
+              <ProtectedRoute permission="read:purchases">
+                <PurchaseListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="purchases/new"
+            element={
+              <ProtectedRoute permission="write:purchases">
+                <PurchaseCreatePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="purchases/:id"
+            element={
+              <ProtectedRoute permission="read:purchases">
+                <PurchaseDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="purchases/suppliers"
+            element={
+              <ProtectedRoute permission="read:purchases">
+                <SuppliersPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Inventory rolls */}
+          <Route
+            path="inventory/rolls"
+            element={
+              <ProtectedRoute permission="read:inventory">
+                <RollListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="inventory/rolls/:id"
+            element={
+              <ProtectedRoute permission="read:inventory">
+                <RollDetailPage />
+              </ProtectedRoute>
+            }
+          />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

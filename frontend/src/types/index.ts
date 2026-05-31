@@ -137,6 +137,115 @@ export interface Batch {
   _count?: { rolls: number };
 }
 
+export interface Supplier {
+  id: string;
+  name: string;
+  contactName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  currentBalance: string;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { purchaseOrders: number };
+}
+
+export type RollStatus = 'IN_STOCK' | 'ALLOCATED' | 'SOLD' | 'WASTED' | 'DAMAGED';
+export type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'PARTIALLY_PAID' | 'UNPAID' | 'CANCELLED';
+
+export interface Roll {
+  id: string;
+  rollNumber: string;
+  barcode?: string | null;
+  productId: string;
+  colorId?: string | null;
+  designId?: string | null;
+  batchId?: string | null;
+  originalLengthYard: string;
+  remainingLengthYard: string;
+  purchasePricePerYardOriginalCurrency?: string | null;
+  purchasePricePerYardBaseCurrency?: string | null;
+  salePricePerYard?: string | null;
+  status: RollStatus;
+  location?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  product?: { id: string; name: string; productCode: string };
+  color?: { id: string; name: string; colorCode?: string | null } | null;
+  design?: { id: string; name: string; designCode?: string | null } | null;
+  batch?: { id: string; batchNumber: string } | null;
+  purchaseRolls?: Array<{
+    id: string;
+    purchasePricePerUnitOriginalCurrency: string;
+    purchasePricePerUnitBaseCurrency: string;
+    purchaseOrder: {
+      id: string;
+      poNumber: string;
+      orderDate: string;
+      purchaseCurrencyCode: string;
+      exchangeRateToBaseCurrency: string;
+    };
+  }>;
+  inventoryMovements?: Array<{
+    id: string;
+    movementType: string;
+    direction: string;
+    quantity: string;
+    createdAt: string;
+    unit: { id: string; abbreviation: string };
+  }>;
+}
+
+export interface PurchaseRollItem {
+  id: string;
+  purchaseOrderId: string;
+  rollId: string;
+  purchasePricePerUnitOriginalCurrency: string;
+  purchasePricePerUnitBaseCurrency: string;
+  roll?: Roll;
+}
+
+export interface PurchaseItem {
+  id: string;
+  purchaseOrderId: string;
+  productId: string;
+  orderedQuantity: string;
+  receivedQuantity: string;
+  unitId: string;
+  unitCostOriginalCurrency: string;
+  lineTotalOriginalCurrency: string;
+  unitCostBaseCurrency: string;
+  lineTotalBaseCurrency: string;
+  product?: { id: string; name: string; productCode: string };
+  unit?: { id: string; name: string; abbreviation: string };
+}
+
+export interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  purchaseCurrencyCode: string;
+  exchangeRateToBaseCurrency: string;
+  subtotalOriginalCurrency: string;
+  discountOriginalCurrency: string;
+  taxOriginalCurrency: string;
+  totalOriginalCurrency: string;
+  subtotalBaseCurrency: string;
+  discountBaseCurrency: string;
+  taxBaseCurrency: string;
+  totalBaseCurrency: string;
+  status: InvoiceStatus;
+  orderDate: string;
+  deliveryDate?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  supplier?: { id: string; name: string; contactName?: string | null };
+  purchaseItems?: PurchaseItem[];
+  purchaseRolls?: PurchaseRollItem[];
+  _count?: { purchaseRolls: number };
+}
+
 // ── Form types ───────────────────────────────────────────────────────────────
 
 export interface CreateCategoryForm {

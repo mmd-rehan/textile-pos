@@ -13,6 +13,9 @@ import { BrandsModule } from './modules/brands/brands.module';
 import { ProductsModule } from './modules/products/products.module';
 import { UnitsModule } from './modules/units/units.module';
 import { BatchesModule } from './modules/batches/batches.module';
+import { SuppliersModule } from './modules/suppliers/suppliers.module';
+import { PurchasesModule } from './modules/purchases/purchases.module';
+import { RollsModule } from './modules/rolls/rolls.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import configuration from './config/configuration';
 
@@ -35,6 +38,9 @@ import configuration from './config/configuration';
     ProductsModule,
     UnitsModule,
     BatchesModule,
+    SuppliersModule,
+    PurchasesModule,
+    RollsModule,
   ],
 })
 export class AppModule implements NestModule {
