@@ -1,3 +1,26 @@
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  email: string;
+  status: UserStatus;
+  roles: Array<{ id: string; name: string }>;
+  permissions: string[];
+}
+
+export interface LoginForm {
+  identifier: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  user: AuthUser;
+}
+
 // ── Shared ──────────────────────────────────────────────────────────────────
 
 export interface PaginatedMeta {

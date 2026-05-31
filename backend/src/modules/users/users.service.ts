@@ -1,103 +1,89 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as argon2 from 'argon2';
+import { UserStatus } from '@prisma/client';
+import { PrismaService } from '../../database/prisma.service';
 import { AppError } from '../../common/errors/app-error';
-
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  roleId: string;
-  isActive: boolean;
-  createdAt: Date;
-}
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
-  
-  // In-memory placeholder store for users
-  private users: User[] = [
-    {
-      id: 'admin-user-id',
-      email: 'admin@textilepos.com',
-      name: 'System Admin',
-      roleId: 'admin-role-id',
-      isActive: true,
-      createdAt: new Date(),
-    },
-    {
-      id: 'cashier-user-id',
-      email: 'cashier@textilepos.com',
-      name: 'Cashier Jane',
-      roleId: 'cashier-role-id',
-      isActive: true,
-      createdAt: new Date(),
-    },
-  ];
 
-  async create(data: { email: string; name: string; roleId?: string }): Promise<User> {
-    this.logger.log(`Creating user: ${data.email}`);
-    
-    // Check duplication
-    const exists = this.users.some(u => u.email === data.email);
-    if (exists) {
-      throw AppError.conflict(`User with email ${data.email} already exists`, 'EMAIL_EXISTS');
-    }
+  constructor(private readonly prisma: PrismaService) {}
 
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      email: data.email,
-      name: data.name,
-      roleId: data.roleId || 'cashier-role-id',
-      isActive: true,
-      createdAt: new Date(),
-    };
-
-    this.users.push(newUser);
-    return newUser;
-  }
-
-  async findAll(): Promise<User[]> {
+  async findAll() {
     this.logger.log('Fetching all users');
-    return this.users;
+    return this.prisma.user.findMany({
+      select: { id: true, username: true, email: true, status: true, createdAt: true, updatedAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
-  async findOne(id: string): Promise<User> {
+  async findOne(id: string) {
     this.logger.log(`Fetching user by ID: ${id}`);
-    const user = this.users.find(u => u.id === id);
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, username: true, email: true, status: true, createdAt: true, updatedAt: true },
+    });
     if (!user) {
       throw AppError.notFound(`User with ID ${id} not found`, 'USER_NOT_FOUND');
     }
     return user;
   }
 
-  async findByEmail(email: string): Promise<User | null> {
-    this.logger.log(`Fetching user by Email: ${email}`);
-    return this.users.find(u => u.email === email) || null;
+  async findByEmail(email: string) {
+    return this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, username: true, email: true, status: true, createdAt: true, updatedAt: true },
+    });
   }
 
-  async update(id: string, data: { name?: string; roleId?: string; isActive?: boolean }): Promise<User> {
+  async create(data: { username: string; email: string; password: string; roleIds?: string[] }) {
+    this.logger.log(`Creating user: ${data.email}`);
+
+    const emailExists = await this.prisma.user.findUnique({ where: { email: data.email } });
+    if (emailExists) {
+      throw AppError.conflict(`Email ${data.email} is already in use`, 'EMAIL_EXISTS');
+    }
+
+    const usernameExists = await this.prisma.user.findUnique({ where: { username: data.username } });
+    if (usernameExists) {
+      throw AppError.conflict(`Username ${data.username} is already in use`, 'USERNAME_EXISTS');
+    }
+
+    const passwordHash = await argon2.hash(data.password);
+
+    const user = await this.prisma.user.create({
+      data: {
+        username: data.username,
+        email: data.email,
+        passwordHash,
+        status: 'ACTIVE',
+        ...(data.roleIds?.length
+          ? { userRoles: { create: data.roleIds.map((roleId) => ({ roleId })) } }
+          : {}),
+      },
+      select: { id: true, username: true, email: true, status: true, createdAt: true, updatedAt: true },
+    });
+
+    return user;
+  }
+
+  async update(id: string, data: { email?: string; status?: UserStatus }) {
     this.logger.log(`Updating user: ${id}`);
-    const index = this.users.findIndex(u => u.id === id);
-    if (index === -1) {
-      throw AppError.notFound(`User with ID ${id} not found`, 'USER_NOT_FOUND');
-    }
 
-    const updatedUser = {
-      ...this.users[index],
-      ...data,
-    };
-    this.users[index] = updatedUser;
-    return updatedUser;
+    await this.findOne(id);
+
+    return this.prisma.user.update({
+      where: { id },
+      data,
+      select: { id: true, username: true, email: true, status: true, createdAt: true, updatedAt: true },
+    });
   }
 
-  async remove(id: string): Promise<{ deleted: boolean }> {
+  async remove(id: string) {
     this.logger.log(`Deleting user: ${id}`);
-    const index = this.users.findIndex(u => u.id === id);
-    if (index === -1) {
-      throw AppError.notFound(`User with ID ${id} not found`, 'USER_NOT_FOUND');
-    }
-
-    this.users.splice(index, 1);
+    await this.findOne(id);
+    await this.prisma.user.delete({ where: { id } });
     return { deleted: true };
   }
 }

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import * as crypto from 'crypto';
+import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
@@ -24,7 +24,7 @@ async function main() {
     { name: 'read:users', description: 'View system users' },
     { name: 'write:users', description: 'Manage system users and access roles' },
     { name: 'read:settings', description: 'View application settings' },
-    { name: 'write:settings', description: 'Modify application and company settings' }
+    { name: 'write:settings', description: 'Modify application and company settings' },
   ];
 
   const permissionMap = new Map<string, string>();
@@ -46,8 +46,9 @@ async function main() {
     { name: 'Admin', description: 'Full system administrator with access to all modules and configurations.' },
     { name: 'Manager', description: 'Business operations manager. Full catalog, inventory, ledger, sales, and purchase management.' },
     { name: 'Cashier', description: 'Retail cashier. Performs sales operations and views catalog.' },
+    { name: 'Sales', description: 'POS-only operator. Can only access the New Sale screen and process sales.' },
     { name: 'Inventory Staff', description: 'Warehouse and stock operator. Manages product, batch, roll, and inventory movements.' },
-    { name: 'Accountant', description: 'Financial accountant. Manages financial ledgers, customer ledger, supplier ledger, and views reports.' }
+    { name: 'Accountant', description: 'Financial accountant. Manages financial ledgers and views reports.' },
   ];
 
   const roleMap = new Map<string, string>();
@@ -65,32 +66,23 @@ async function main() {
   // 3. SEED ROLE-PERMISSION ASSOCIATIONS
   // ==========================================
   console.log('🔗 Associating roles and permissions...');
-  
+
   const allPermissionNames = Array.from(permissionMap.keys());
 
   const rolePermissionMap: Record<string, string[]> = {
-    'Admin': allPermissionNames,
-    'Manager': [
+    Admin: allPermissionNames,
+    Manager: [
       'read:products', 'write:products',
       'read:sales', 'write:sales',
       'read:purchases', 'write:purchases',
       'read:inventory', 'write:inventory',
       'read:ledger', 'write:ledger',
-      'read:settings'
+      'read:settings',
     ],
-    'Cashier': [
-      'read:products',
-      'read:sales', 'write:sales'
-    ],
-    'Inventory Staff': [
-      'read:products', 'write:products',
-      'read:inventory', 'write:inventory'
-    ],
-    'Accountant': [
-      'read:sales',
-      'read:purchases',
-      'read:ledger', 'write:ledger'
-    ]
+    Cashier: ['read:products', 'read:sales', 'write:sales'],
+    Sales: ['write:sales'],
+    'Inventory Staff': ['read:products', 'write:products', 'read:inventory', 'write:inventory'],
+    Accountant: ['read:sales', 'read:purchases', 'read:ledger', 'write:ledger'],
   };
 
   let rolePermissionCount = 0;
@@ -103,11 +95,9 @@ async function main() {
       if (!permissionId) continue;
 
       await prisma.rolePermission.upsert({
-        where: {
-          roleId_permissionId: { roleId, permissionId }
-        },
+        where: { roleId_permissionId: { roleId, permissionId } },
         update: {},
-        create: { roleId, permissionId }
+        create: { roleId, permissionId },
       });
       rolePermissionCount++;
     }
@@ -121,7 +111,7 @@ async function main() {
   const units = [
     { name: 'Yard', abbreviation: 'yd' },
     { name: 'Meter', abbreviation: 'm' },
-    { name: 'Piece', abbreviation: 'pc' }
+    { name: 'Piece', abbreviation: 'pc' },
   ];
 
   const unitMap = new Map<string, string>();
@@ -145,26 +135,21 @@ async function main() {
   if (yardId && meterId) {
     const conversions = [
       { fromUnitId: yardId, toUnitId: meterId, factor: 0.9144 },
-      { fromUnitId: meterId, toUnitId: yardId, factor: 1.093613 }
+      { fromUnitId: meterId, toUnitId: yardId, factor: 1.093613 },
     ];
 
     for (const conv of conversions) {
       const existing = await prisma.unitConversion.findFirst({
-        where: { fromUnitId: conv.fromUnitId, toUnitId: conv.toUnitId }
+        where: { fromUnitId: conv.fromUnitId, toUnitId: conv.toUnitId },
       });
 
       if (existing) {
-        await prisma.unitConversion.update({
-          where: { id: existing.id },
-          data: { factor: conv.factor }
-        });
+        await prisma.unitConversion.update({ where: { id: existing.id }, data: { factor: conv.factor } });
       } else {
-        await prisma.unitConversion.create({
-          data: conv
-        });
+        await prisma.unitConversion.create({ data: conv });
       }
     }
-    console.log('✅ Seeded conversions (Yard to Meter and Meter to Yard).');
+    console.log('✅ Seeded conversions (Yard ↔ Meter).');
   }
 
   // ==========================================
@@ -175,54 +160,73 @@ async function main() {
     { key: 'company_name', value: 'Textile POS & ERP Ltd.', description: 'Official registered company name' },
     { key: 'company_currency', value: 'AED', description: 'Primary trading currency' },
     { key: 'company_timezone', value: 'Asia/Dubai', description: 'System base timezone for operations' },
-    { key: 'company_tax_rate', value: '5.00', description: 'Standard VAT tax rate percentage' }
+    { key: 'company_tax_rate', value: '5.00', description: 'Standard VAT tax rate percentage' },
   ];
 
   for (const s of companySettings) {
     await prisma.companySetting.upsert({
       where: { key: s.key },
       update: { value: s.value, description: s.description },
-      create: s
+      create: s,
     });
   }
   console.log(`✅ Seeded ${companySettings.length} company settings.`);
 
   // ==========================================
-  // 7. SEED DEFAULT ADMIN USER
+  // 7. SEED DEFAULT USERS
   // ==========================================
-  console.log('👤 Seeding default admin user...');
-  const passwordRaw = 'Admin@123';
-  // Standard SHA-256 password hash for the initial admin account
-  const passwordHash = crypto.createHash('sha256').update(passwordRaw).digest('hex');
+  console.log('👤 Seeding default users...');
 
+  const adminHash = await argon2.hash('Admin@123');
   const adminUser = await prisma.user.upsert({
     where: { username: 'admin' },
-    update: {
-      email: 'admin@textilepos.com',
-      status: 'ACTIVE'
-    },
-    create: {
-      username: 'admin',
-      email: 'admin@textilepos.com',
-      passwordHash: passwordHash,
-      status: 'ACTIVE'
-    }
+    update: { email: 'admin@textilepos.com', passwordHash: adminHash, status: 'ACTIVE' },
+    create: { username: 'admin', email: 'admin@textilepos.com', passwordHash: adminHash, status: 'ACTIVE' },
   });
 
   const adminRoleId = roleMap.get('Admin');
   if (adminRoleId) {
     await prisma.userRole.upsert({
-      where: {
-        userId_roleId: { userId: adminUser.id, roleId: adminRoleId }
-      },
+      where: { userId_roleId: { userId: adminUser.id, roleId: adminRoleId } },
       update: {},
-      create: {
-        userId: adminUser.id,
-        roleId: adminRoleId
-      }
+      create: { userId: adminUser.id, roleId: adminRoleId },
     });
-    console.log('✅ Seeded default admin user and linked to Admin role.');
   }
+  console.log('✅ Seeded admin user (username: admin, password: Admin@123).');
+
+  const cashierHash = await argon2.hash('Cashier@123');
+  const cashierUser = await prisma.user.upsert({
+    where: { username: 'cashier' },
+    update: { email: 'cashier@textilepos.com', passwordHash: cashierHash, status: 'ACTIVE' },
+    create: { username: 'cashier', email: 'cashier@textilepos.com', passwordHash: cashierHash, status: 'ACTIVE' },
+  });
+
+  const cashierRoleId = roleMap.get('Cashier');
+  if (cashierRoleId) {
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: cashierUser.id, roleId: cashierRoleId } },
+      update: {},
+      create: { userId: cashierUser.id, roleId: cashierRoleId },
+    });
+  }
+  console.log('✅ Seeded cashier user (username: cashier, password: Cashier@123).');
+
+  const salesHash = await argon2.hash('Sales@123');
+  const salesUser = await prisma.user.upsert({
+    where: { username: 'sales' },
+    update: { email: 'sales@textilepos.com', passwordHash: salesHash, status: 'ACTIVE' },
+    create: { username: 'sales', email: 'sales@textilepos.com', passwordHash: salesHash, status: 'ACTIVE' },
+  });
+
+  const salesRoleId = roleMap.get('Sales');
+  if (salesRoleId) {
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: salesUser.id, roleId: salesRoleId } },
+      update: {},
+      create: { userId: salesUser.id, roleId: salesRoleId },
+    });
+  }
+  console.log('✅ Seeded sales user (username: sales, password: Sales@123).');
 
   console.log('🎉 Database seeding completed successfully!');
 }

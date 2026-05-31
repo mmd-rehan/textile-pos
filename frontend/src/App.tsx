@@ -1,7 +1,9 @@
-import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import Shell from './components/layout/Shell';
 import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
+import LoginPage from './pages/LoginPage';
 import NewSale from './pages/NewSale';
 import SalesHistory from './pages/SalesHistory';
 import BatchesPage from './pages/catalog/BatchesPage';
@@ -14,19 +16,90 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Shell />}>
+        <Route path="/login" element={<LoginPage />} />
+
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Shell />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<Dashboard />} />
-          <Route path="sales/new" element={<NewSale />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="sales/history" element={<SalesHistory />} />
-          {/* Catalog */}
-          <Route path="catalog/products" element={<ProductsPage />} />
-          <Route path="catalog/products/new" element={<ProductForm />} />
-          <Route path="catalog/products/:id/edit" element={<ProductForm />} />
-          <Route path="catalog/categories" element={<CategoriesPage />} />
-          <Route path="catalog/brands" element={<BrandsPage />} />
-          <Route path="catalog/batches" element={<BatchesPage />} />
-          <Route path="*" element={<Dashboard />} />
+          <Route
+            path="sales/new"
+            element={
+              <ProtectedRoute permission="write:sales">
+                <NewSale />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="inventory"
+            element={
+              <ProtectedRoute permission="read:inventory">
+                <Inventory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="sales/history"
+            element={
+              <ProtectedRoute permission="read:sales">
+                <SalesHistory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="catalog/products"
+            element={
+              <ProtectedRoute permission="read:products">
+                <ProductsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="catalog/products/new"
+            element={
+              <ProtectedRoute permission="write:products">
+                <ProductForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="catalog/products/:id/edit"
+            element={
+              <ProtectedRoute permission="write:products">
+                <ProductForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="catalog/categories"
+            element={
+              <ProtectedRoute permission="read:products">
+                <CategoriesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="catalog/brands"
+            element={
+              <ProtectedRoute permission="read:products">
+                <BrandsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="catalog/batches"
+            element={
+              <ProtectedRoute permission="read:inventory">
+                <BatchesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
     </Router>
