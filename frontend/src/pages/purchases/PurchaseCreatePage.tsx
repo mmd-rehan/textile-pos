@@ -1,14 +1,19 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
+import { batchesApi } from '../../api/batches';
+import { colorsApi, designsApi, productsApi } from '../../api/products';
 import { purchasesApi } from '../../api/purchases';
 import { suppliersApi } from '../../api/suppliers';
-import { productsApi } from '../../api/products';
-import { batchesApi } from '../../api/batches';
 import Button from '../../components/ui/Button';
-import { useAppStore } from '../../store/useAppStore';
+import Modal from '../../components/ui/Modal';
 import { CURRENCIES, GLOBAL_SALE_CURRENCY, formatAmount, getCurrency } from '../../constants/currencies';
+import { COLORS_KEY } from '../../hooks/useColors';
+import { DESIGNS_KEY } from '../../hooks/useDesigns';
+import { useAppStore } from '../../store/useAppStore';
+import type { Color, Design } from '../../types';
 
 interface RollRow {
   productId: string;
@@ -41,6 +46,15 @@ const saleCurrency = getCurrency(GLOBAL_SALE_CURRENCY);
 export default function PurchaseCreatePage() {
   const navigate = useNavigate();
   const { showNotification } = useAppStore();
+  const qc = useQueryClient();
+
+  // Quick-create modals
+  const [quickColorOpen, setQuickColorOpen] = useState(false);
+  const [quickColorName, setQuickColorName] = useState('');
+  const [quickDesignOpen, setQuickDesignOpen] = useState(false);
+  const [quickDesignName, setQuickDesignName] = useState('');
+  const [lastCreatedColorId, setLastCreatedColorId] = useState<string | null>(null);
+  const [lastCreatedDesignId, setLastCreatedDesignId] = useState<string | null>(null);
 
   const { data: suppliersData } = useQuery({
     queryKey: ['suppliers-select'],
@@ -54,12 +68,24 @@ export default function PurchaseCreatePage() {
     queryKey: ['batches-select'],
     queryFn: () => batchesApi.getAll({ limit: 200 }),
   });
+  const { data: colorsData } = useQuery({
+    queryKey: [...COLORS_KEY, undefined, true],
+    queryFn: () => colorsApi.getAll({ activeOnly: true }),
+    select: (res) => res.data,
+  });
+  const { data: designsData } = useQuery({
+    queryKey: [...DESIGNS_KEY, undefined, true],
+    queryFn: () => designsApi.getAll({ activeOnly: true }),
+    select: (res) => res.data,
+  });
 
   const suppliers = suppliersData?.data ?? [];
   const products = productsData?.data ?? [];
   const batches = batchesData?.data ?? [];
+  const allColors: Color[] = colorsData ?? [];
+  const allDesigns: Design[] = designsData ?? [];
 
-  const { register, control, handleSubmit, formState: { errors } } = useForm<PurchaseForm>({
+  const { register, control, handleSubmit, setValue, formState: { errors } } = useForm<PurchaseForm>({
     defaultValues: {
       supplierId: '',
       currency: 'PKR',
@@ -95,9 +121,45 @@ export default function PurchaseCreatePage() {
   }, 0) ?? 0;
 
   const totalCostBase = totalCostOriginal * exchangeRate;
-
   const paidVal = parseFloat(useWatch({ control, name: 'paidAmount' }) || '0') || 0;
   const payable = Math.max(0, totalCostOriginal - paidVal);
+
+  // Quick-create color
+  const quickCreateColor = useMutation({
+    mutationFn: () => colorsApi.create({ name: quickColorName.trim() }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: COLORS_KEY });
+      setLastCreatedColorId(res.data.id);
+      // Auto-select on all roll rows that have no color yet
+      fields.forEach((_, i) => {
+        if (!watchedRolls?.[i]?.colorId) {
+          setValue(`rolls.${i}.colorId`, res.data.id);
+        }
+      });
+      setQuickColorOpen(false);
+      setQuickColorName('');
+      showNotification(`Color "${res.data.name}" created.`, 'success');
+    },
+    onError: (err: any) => showNotification(err?.message ?? 'Failed to create color.', 'error'),
+  });
+
+  // Quick-create design
+  const quickCreateDesign = useMutation({
+    mutationFn: () => designsApi.create({ name: quickDesignName.trim() }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: DESIGNS_KEY });
+      setLastCreatedDesignId(res.data.id);
+      fields.forEach((_, i) => {
+        if (!watchedRolls?.[i]?.designId) {
+          setValue(`rolls.${i}.designId`, res.data.id);
+        }
+      });
+      setQuickDesignOpen(false);
+      setQuickDesignName('');
+      showNotification(`Design "${res.data.name}" created.`, 'success');
+    },
+    onError: (err: any) => showNotification(err?.message ?? 'Failed to create design.', 'error'),
+  });
 
   const createMutation = useMutation({
     mutationFn: (form: PurchaseForm) => {
@@ -298,14 +360,30 @@ export default function PurchaseCreatePage() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
             <h2 className="font-semibold text-gray-800">Rolls</h2>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => append({ productId: '', colorId: '', designId: '', originalLengthYard: '', purchasePricePerYard: '', salePricePerYard: '', location: '' })}
-            >
-              <Plus className="w-4 h-4" /> Add Roll
-            </Button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => { setQuickColorName(''); setQuickColorOpen(true); }}
+                className="text-xs px-2 py-1 rounded border border-dashed border-primary-400 text-primary-600 hover:bg-primary-50"
+              >
+                + Add Color
+              </button>
+              <button
+                type="button"
+                onClick={() => { setQuickDesignName(''); setQuickDesignOpen(true); }}
+                className="text-xs px-2 py-1 rounded border border-dashed border-primary-400 text-primary-600 hover:bg-primary-50"
+              >
+                + Add Design
+              </button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => append({ productId: '', colorId: '', designId: '', originalLengthYard: '', purchasePricePerYard: '', salePricePerYard: '', location: '' })}
+              >
+                <Plus className="w-4 h-4" /> Add Roll
+              </Button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -334,9 +412,6 @@ export default function PurchaseCreatePage() {
                   const len = parseFloat(watchedRolls?.[index]?.originalLengthYard || '0') || 0;
                   const price = parseFloat(watchedRolls?.[index]?.purchasePricePerYard || '0') || 0;
                   const sub = len * price;
-                  const selectedProduct = products.find((p) => p.id === watchedRolls?.[index]?.productId);
-                  const colorOptions = selectedProduct?.productColors ?? [];
-                  const designOptions = selectedProduct?.productDesigns ?? [];
 
                   return (
                     <tr key={field.id} className="align-top">
@@ -360,8 +435,8 @@ export default function PurchaseCreatePage() {
                           className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                         >
                           <option value="">—</option>
-                          {colorOptions.map((c) => (
-                            <option key={c.id} value={c.color.id}>{c.color.name}</option>
+                          {allColors.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
                         </select>
                       </td>
@@ -371,8 +446,8 @@ export default function PurchaseCreatePage() {
                           className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                         >
                           <option value="">—</option>
-                          {designOptions.map((d) => (
-                            <option key={d.id} value={d.design.id}>{d.design.name}</option>
+                          {allDesigns.map((d) => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
                           ))}
                         </select>
                       </td>
@@ -512,6 +587,82 @@ export default function PurchaseCreatePage() {
           </Button>
         </div>
       </form>
+
+      {/* Quick-create Color Modal */}
+      <Modal open={quickColorOpen} onClose={() => setQuickColorOpen(false)} title="Quick Add Color">
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (quickColorName.trim()) quickCreateColor.mutate(); }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Color Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={quickColorName}
+              onChange={(e) => setQuickColorName(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="e.g. Royal Blue"
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setQuickColorOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!quickColorName.trim() || quickCreateColor.isPending}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+            >
+              {quickCreateColor.isPending ? 'Creating…' : 'Create & Select'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Quick-create Design Modal */}
+      <Modal open={quickDesignOpen} onClose={() => setQuickDesignOpen(false)} title="Quick Add Design">
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (quickDesignName.trim()) quickCreateDesign.mutate(); }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Design Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={quickDesignName}
+              onChange={(e) => setQuickDesignName(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="e.g. Floral Print"
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setQuickDesignOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!quickDesignName.trim() || quickCreateDesign.isPending}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+            >
+              {quickCreateDesign.isPending ? 'Creating…' : 'Create & Select'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

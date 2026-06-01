@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { Color, Design, Product, CreateProductForm } from '../types';
+import type { Color, Design, Product, CreateProductForm, CreateColorForm, CreateDesignForm } from '../types';
 
 export interface ProductQuery {
   page?: number;
@@ -47,17 +47,35 @@ export const productsApi = {
 };
 
 export const colorsApi = {
-  getAll: (search?: string): Promise<{ data: Color[] }> =>
-    apiClient.get('/colors', { params: { search } }),
+  getAll: (params: { search?: string; activeOnly?: boolean } = {}): Promise<{ data: Color[] }> =>
+    apiClient.get('/colors', { params: { search: params.search, activeOnly: params.activeOnly ? 'true' : undefined } }),
 
-  create: (data: { name: string; colorCode?: string }): Promise<{ data: Color }> =>
+  getOne: (id: string): Promise<{ data: Color }> =>
+    apiClient.get(`/colors/${id}`),
+
+  create: (data: CreateColorForm): Promise<{ data: Color }> =>
     apiClient.post('/colors', data),
+
+  update: (id: string, data: Partial<CreateColorForm> & { isActive?: boolean }): Promise<{ data: Color }> =>
+    apiClient.patch(`/colors/${id}`, data),
+
+  remove: (id: string): Promise<{ data: { id: string } }> =>
+    apiClient.delete(`/colors/${id}`),
 };
 
 export const designsApi = {
-  getAll: (search?: string): Promise<{ data: Design[] }> =>
-    apiClient.get('/designs', { params: { search } }),
+  getAll: (params: { search?: string; activeOnly?: boolean } = {}): Promise<{ data: Design[] }> =>
+    apiClient.get('/designs', { params: { search: params.search, activeOnly: params.activeOnly ? 'true' : undefined } }),
 
-  create: (data: { name: string; designCode?: string }): Promise<{ data: Design }> =>
+  getOne: (id: string): Promise<{ data: Design }> =>
+    apiClient.get(`/designs/${id}`),
+
+  create: (data: CreateDesignForm): Promise<{ data: Design }> =>
     apiClient.post('/designs', data),
+
+  update: (id: string, data: Partial<CreateDesignForm> & { isActive?: boolean }): Promise<{ data: Design }> =>
+    apiClient.patch(`/designs/${id}`, data),
+
+  remove: (id: string): Promise<{ data: { id: string } }> =>
+    apiClient.delete(`/designs/${id}`),
 };

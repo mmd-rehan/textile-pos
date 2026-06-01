@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { PurchaseOrder } from '../types';
+import type { PurchaseOrder, SupplierPayment } from '../types';
 
 export interface PurchaseQuery {
   page?: number;
@@ -34,6 +34,13 @@ export interface CreatePurchaseInput {
   rolls: CreatePurchaseRollInput[];
 }
 
+export interface CreatePaymentInput {
+  amount: number;
+  paymentMethod: string;
+  paymentDate: string;
+  notes?: string;
+}
+
 export const purchasesApi = {
   getAll: (params: PurchaseQuery = {}): Promise<{ data: PurchaseOrder[]; meta: any }> =>
     apiClient.get('/purchases', { params }),
@@ -43,4 +50,10 @@ export const purchasesApi = {
 
   create: (data: CreatePurchaseInput): Promise<{ data: PurchaseOrder }> =>
     apiClient.post('/purchases', data),
+
+  getPayments: (purchaseId: string): Promise<{ data: SupplierPayment[] }> =>
+    apiClient.get(`/purchases/${purchaseId}/payments`),
+
+  createPayment: (purchaseId: string, data: CreatePaymentInput): Promise<{ data: PurchaseOrder }> =>
+    apiClient.post(`/purchases/${purchaseId}/payments`, data),
 };

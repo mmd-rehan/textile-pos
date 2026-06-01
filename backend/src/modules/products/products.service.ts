@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, ProductStatus } from '@prisma/client';
-import { PrismaService } from '../../database/prisma.service';
+import { Prisma } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
+import { PrismaService } from '../../database/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
+import { AddProductColorDto, CreateColorDto, UpdateColorDto } from './dto/manage-product-color.dto';
+import { AddProductDesignDto, CreateDesignDto, UpdateDesignDto } from './dto/manage-product-design.dto';
 import { QueryProductDto } from './dto/query-product.dto';
-import { AddProductColorDto, CreateColorDto } from './dto/manage-product-color.dto';
-import { AddProductDesignDto, CreateDesignDto } from './dto/manage-product-design.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
 
 const PRODUCT_INCLUDE = {
   category: { select: { id: true, name: true } },
@@ -21,7 +21,7 @@ const PRODUCT_INCLUDE = {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async findAll(query: QueryProductDto) {
     const page = query.page ?? 1;
@@ -222,30 +222,86 @@ export class ProductsService {
 
   // ── Global Color/Design Catalog ───────────────────────────────────
 
-  async findAllColors(search?: string) {
-    return this.prisma.color.findMany({
-      where: search ? { name: { contains: search } } : undefined,
-      orderBy: { name: 'asc' },
-    });
+  async findAllColors(search?: string, activeOnly?: boolean) {
+    const where: Prisma.ColorWhereInput = {};
+    if (search) where.name = { contains: search };
+    if (activeOnly) where.isActive = true;
+    return this.prisma.color.findMany({ where, orderBy: { name: 'asc' } });
+  }
+
+  async findColorById(id: string) {
+    const color = await this.prisma.color.findUnique({ where: { id } });
+    if (!color) throw AppError.notFound('Color not found', 'COLOR_NOT_FOUND');
+    return color;
   }
 
   async createColor(dto: CreateColorDto) {
     const existing = await this.prisma.color.findUnique({ where: { name: dto.name } });
     if (existing) throw AppError.conflict('Color name already exists', 'COLOR_EXISTS');
-    return this.prisma.color.create({ data: { name: dto.name, colorCode: dto.colorCode } });
+    return this.prisma.color.create({
+      data: { name: dto.name, colorCode: dto.colorCode, hexCode: dto.hexCode },
+    });
   }
 
-  async findAllDesigns(search?: string) {
-    return this.prisma.design.findMany({
-      where: search ? { name: { contains: search } } : undefined,
-      orderBy: { name: 'asc' },
+  async updateColor(id: string, dto: UpdateColorDto) {
+    await this.findColorById(id);
+    if (dto.name) {
+      const existing = await this.prisma.color.findFirst({ where: { name: dto.name, NOT: { id } } });
+      if (existing) throw AppError.conflict('Color name already exists', 'COLOR_EXISTS');
+    }
+    return this.prisma.color.update({
+      where: { id },
+      data: { name: dto.name, colorCode: dto.colorCode, hexCode: dto.hexCode, isActive: dto.isActive },
     });
+  }
+
+  async deleteColor(id: string) {
+    await this.findColorById(id);
+    const rollCount = await this.prisma.roll.count({ where: { colorId: id } });
+    if (rollCount > 0) throw AppError.conflict('Cannot delete color with associated rolls', 'COLOR_HAS_ROLLS');
+    await this.prisma.color.delete({ where: { id } });
+    return { id };
+  }
+
+  async findAllDesigns(search?: string, activeOnly?: boolean) {
+    const where: Prisma.DesignWhereInput = {};
+    if (search) where.name = { contains: search };
+    if (activeOnly) where.isActive = true;
+    return this.prisma.design.findMany({ where, orderBy: { name: 'asc' } });
+  }
+
+  async findDesignById(id: string) {
+    const design = await this.prisma.design.findUnique({ where: { id } });
+    if (!design) throw AppError.notFound('Design not found', 'DESIGN_NOT_FOUND');
+    return design;
   }
 
   async createDesign(dto: CreateDesignDto) {
     const existing = await this.prisma.design.findUnique({ where: { name: dto.name } });
     if (existing) throw AppError.conflict('Design name already exists', 'DESIGN_EXISTS');
-    return this.prisma.design.create({ data: { name: dto.name, designCode: dto.designCode } });
+    return this.prisma.design.create({
+      data: { name: dto.name, designCode: dto.designCode, description: dto.description },
+    });
+  }
+
+  async updateDesign(id: string, dto: UpdateDesignDto) {
+    await this.findDesignById(id);
+    if (dto.name) {
+      const existing = await this.prisma.design.findFirst({ where: { name: dto.name, NOT: { id } } });
+      if (existing) throw AppError.conflict('Design name already exists', 'DESIGN_EXISTS');
+    }
+    return this.prisma.design.update({
+      where: { id },
+      data: { name: dto.name, designCode: dto.designCode, description: dto.description, isActive: dto.isActive },
+    });
+  }
+
+  async deleteDesign(id: string) {
+    await this.findDesignById(id);
+    const rollCount = await this.prisma.roll.count({ where: { designId: id } });
+    if (rollCount > 0) throw AppError.conflict('Cannot delete design with associated rolls', 'DESIGN_HAS_ROLLS');
+    await this.prisma.design.delete({ where: { id } });
+    return { id };
   }
 
   // ── Helpers ───────────────────────────────────────────────────────

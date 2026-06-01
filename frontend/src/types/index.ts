@@ -67,6 +67,8 @@ export interface Color {
   id: string;
   name: string;
   colorCode?: string | null;
+  hexCode?: string | null;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,8 +77,53 @@ export interface Design {
   id: string;
   name: string;
   designCode?: string | null;
+  description?: string | null;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateColorForm {
+  name: string;
+  colorCode?: string;
+  hexCode?: string;
+}
+
+export interface CreateDesignForm {
+  name: string;
+  designCode?: string;
+  description?: string;
+}
+
+export interface SupplierPayment {
+  id: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  amountOriginalCurrency: string;
+  amountBaseCurrency: string;
+  currencyCode: string;
+  exchangeRateToBaseCurrency: string;
+  paymentMethod: string;
+  paymentDate: string;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupplierLedgerEntry {
+  id: string;
+  supplierId: string;
+  currencyCode: string;
+  debitOriginalCurrency: string;
+  creditOriginalCurrency: string;
+  exchangeRateToBaseCurrency: string;
+  debitBaseCurrency: string;
+  creditBaseCurrency: string;
+  balanceAfterBase: string;
+  referenceType: string;
+  referenceId: string;
+  remarks?: string | null;
+  createdAt: string;
 }
 
 export interface Unit {
@@ -234,6 +281,8 @@ export interface PurchaseOrder {
   discountBaseCurrency: string;
   taxBaseCurrency: string;
   totalBaseCurrency: string;
+  paidAmountOriginalCurrency: string;
+  dueAmountOriginalCurrency: string;
   status: InvoiceStatus;
   orderDate: string;
   deliveryDate?: string | null;
