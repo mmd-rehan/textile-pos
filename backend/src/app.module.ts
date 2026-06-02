@@ -10,12 +10,14 @@ import { BarcodesModule } from './modules/barcodes/barcodes.module';
 import { BatchesModule } from './modules/batches/batches.module';
 import { BrandsModule } from './modules/brands/brands.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { CustomersModule } from './modules/customers/customers.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { ProductsModule } from './modules/products/products.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { RollsModule } from './modules/rolls/rolls.module';
+import { SalesModule } from './modules/sales/sales.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { UnitsModule } from './modules/units/units.module';
@@ -45,6 +47,8 @@ import { UsersModule } from './modules/users/users.module';
     RollsModule,
     BarcodesModule,
     InventoryModule,
+    CustomersModule,
+    SalesModule,
   ],
 })
 export class AppModule implements NestModule {

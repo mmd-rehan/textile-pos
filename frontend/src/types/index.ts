@@ -425,3 +425,92 @@ export interface StockSummaryItem {
   totalOriginalYard: string;
   totalRemainingYard: string;
 }
+
+// ── Customers ──────────────────────────────────────────────────────────────────
+
+export type CustomerType = 'RETAIL' | 'WHOLESALE';
+
+export interface Customer {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  type: CustomerType;
+  creditLimit?: string | null;
+  currentBalance: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Sales ─────────────────────────────────────────────────────────────────────
+
+export type PaymentStatus = 'PENDING' | 'PAID' | 'PARTIALLY_PAID' | 'REFUNDED' | 'FAILED';
+export type SaleType = 'RETAIL' | 'WHOLESALE';
+
+export interface SaleInvoiceItem {
+  id: string;
+  invoiceId: string;
+  productId: string;
+  rollId?: string | null;
+  colorId?: string | null;
+  designId?: string | null;
+  billedQuantity: string;
+  actualCutQuantity: string;
+  unitId: string;
+  unitPrice: string;
+  discountAmount: string;
+  taxAmount: string;
+  subTotal: string;
+  createdAt: string;
+  updatedAt: string;
+  product?: { id: string; name: string; productCode: string };
+  roll?: { id: string; rollNumber: string; barcode?: string | null } | null;
+  color?: { id: string; name: string } | null;
+  design?: { id: string; name: string } | null;
+  unit?: { id: string; name: string; abbreviation: string };
+}
+
+export interface SalePaymentRecord {
+  id: string;
+  invoiceId: string;
+  paymentMethod: string;
+  amount: string;
+  transactionNumber?: string | null;
+  paymentDate: string;
+  status: PaymentStatus;
+  receivedById: string;
+  createdAt: string;
+  updatedAt: string;
+  receivedBy?: { id: string; username: string };
+}
+
+export interface SaleInvoice {
+  id: string;
+  invoiceNumber: string;
+  customerId?: string | null;
+  totalAmount: string;
+  discountAmount: string;
+  taxAmount: string;
+  netAmount: string;
+  paidAmount: string;
+  dueAmount: string;
+  status: InvoiceStatus;
+  paymentStatus: PaymentStatus;
+  saleType: SaleType;
+  cashierId: string;
+  notes?: string | null;
+  idempotencyKey?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  customer?: { id: string; name: string; phone?: string | null; email?: string | null } | null;
+  cashier?: { id: string; username: string };
+  saleInvoiceItems?: SaleInvoiceItem[];
+  salePayments?: SalePaymentRecord[];
+  _count?: { saleInvoiceItems: number };
+}
+
+export interface ReceiptData {
+  invoice: SaleInvoice;
+  company: { name: string; address: string; phone: string };
+}
