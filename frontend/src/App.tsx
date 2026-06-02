@@ -17,6 +17,7 @@ import BarcodeLookupPage from './pages/inventory/BarcodeLookupPage';
 import MovementsPage from './pages/inventory/MovementsPage';
 import RollDetailPage from './pages/inventory/RollDetailPage';
 import RollListPage from './pages/inventory/RollListPage';
+import RetailPOSPage from './pages/pos/RetailPOSPage';
 import PurchaseCreatePage from './pages/purchases/PurchaseCreatePage';
 import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
 import PurchaseListPage from './pages/purchases/PurchaseListPage';
@@ -37,6 +38,14 @@ function App() {
           }
         >
           <Route index element={<Dashboard />} />
+          <Route
+            path="pos/retail"
+            element={
+              <ProtectedRoute permission="write:sales">
+                <RetailPOSPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="sales/new"
             element={

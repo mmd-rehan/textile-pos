@@ -33,7 +33,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'New Sale', href: '/sales/new', icon: ShoppingCart, permission: 'write:sales' },
+  { name: 'Retail POS', href: '/pos/retail', icon: ShoppingCart, permission: 'write:sales' },
   { name: 'Sales History', href: '/sales/history', icon: History, permission: 'read:sales' },
 ];
 

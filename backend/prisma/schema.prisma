@@ -605,9 +605,10 @@ model SaleInvoice {
   paymentStatus  PaymentStatus @default(PENDING) @map("payment_status")
   saleType       SaleType      @default(RETAIL) @map("sale_type")
   cashierId      String        @map("cashier_id")
-  notes          String?       @db.Text
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  notes            String?       @db.Text
+  idempotencyKey   String?       @unique @map("idempotency_key")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
   customer         Customer?         @relation(fields: [customerId], references: [id], onDelete: Restrict)
   cashier          User              @relation("CashierInvoices", fields: [cashierId], references: [id], onDelete: Restrict)

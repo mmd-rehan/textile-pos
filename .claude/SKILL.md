@@ -63,3 +63,22 @@ Catalog master data rules:
 3. Purchase forms may support quick-create for color/design to avoid blocking the workflow.
 4. Dropdowns should use active records only.
 5. Do not hardcode color/design values in frontend.
+
+Product type inventory rules:
+1. Product is the catalog/sellable definition.
+2. Roll is only required for variable-length fabric products.
+3. FABRIC_ROLL products are purchased as one or more rolls with individual lengths.
+4. FABRIC_ROLL products are sold by yard/meter from a selected roll.
+5. FIXED_PRODUCT products are purchased as quantity stock, not rolls.
+6. FIXED_PRODUCT products are sold by piece/unit, not yard/meter.
+7. CUT_PIECE products are purchased as quantity stock in v1 unless explicitly created from a roll later.
+8. CUT_PIECE products are sold by piece/unit in v1.
+9. Purchase forms must change based on product type.
+10. POS behavior must change based on product type.
+11. Do not ask for roll length for fixed products or cut pieces.
+12. Do not require roll barcode for fixed products or cut pieces.
+13. Product barcode or product-variant barcode should be searchable in POS.
+14. Product search in POS must not assume every product has rolls.
+15. Stock movements are required for both roll-based and quantity-based inventory.
+16. For roll products, stock movement references rollId and quantityYard.
+17. For fixed/cut products, stock movement references productId or productVariantId and quantity.
