@@ -916,22 +916,43 @@ export default function RetailPOSPage() {
               Customer (optional)
             </label>
             {customerId && selectedCustomer ? (
-              <div className="flex items-center justify-between bg-primary-50 border border-primary-200 rounded-lg px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-primary-600" />
-                  <div>
-                    <p className="text-sm font-medium text-primary-900">{selectedCustomer.name}</p>
-                    {selectedCustomer.phone && (
-                      <p className="text-xs text-primary-600">{selectedCustomer.phone}</p>
-                    )}
+              <div>
+                <div className="flex items-center justify-between bg-primary-50 border border-primary-200 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-primary-600" />
+                    <div>
+                      <p className="text-sm font-medium text-primary-900">{selectedCustomer.name}</p>
+                      {selectedCustomer.phone && (
+                        <p className="text-xs text-primary-600">{selectedCustomer.phone}</p>
+                      )}
+                    </div>
                   </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setCustomerId(null); setCustomerSearch(''); }}
+                    className="p-1 text-primary-400 hover:text-primary-700"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setCustomerId(null); setCustomerSearch(''); }}
-                  className="p-1 text-primary-400 hover:text-primary-700"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                {parseFloat(selectedCustomer.currentBalance) > 0 && (
+                  <div className={`mt-2 px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 ${
+                    selectedCustomer.creditLimit &&
+                    parseFloat(selectedCustomer.currentBalance) >= parseFloat(selectedCustomer.creditLimit)
+                      ? 'bg-red-50 text-red-700 border border-red-200'
+                      : 'bg-amber-50 text-amber-700 border border-amber-200'
+                  }`}>
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      Outstanding:{' '}
+                      <span className="font-mono font-semibold">
+                        {formatAmount(selectedCustomer.currentBalance, GLOBAL_SALE_CURRENCY)}
+                      </span>
+                      {selectedCustomer.creditLimit && (
+                        <> / Limit: <span className="font-mono">{formatAmount(selectedCustomer.creditLimit, GLOBAL_SALE_CURRENCY)}</span></>
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="relative">
@@ -955,10 +976,19 @@ export default function RetailPOSPage() {
                           setCustomerSearch('');
                           setShowCustomerDropdown(false);
                         }}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm"
+                        className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b border-gray-50 last:border-0"
                       >
-                        <p className="font-medium text-gray-900">{c.name}</p>
-                        {c.phone && <p className="text-xs text-gray-500">{c.phone}</p>}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900">{c.name}</p>
+                            {c.phone && <p className="text-xs text-gray-500">{c.phone}</p>}
+                          </div>
+                          {parseFloat(c.currentBalance) > 0 && (
+                            <span className="text-xs font-mono text-amber-700 shrink-0 ml-2">
+                              {formatAmount(c.currentBalance, GLOBAL_SALE_CURRENCY)}
+                            </span>
+                          )}
+                        </div>
                       </button>
                     ))}
                   </div>

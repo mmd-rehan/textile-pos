@@ -490,7 +490,8 @@ export interface StockSummaryItem {
 
 // ── Customers ──────────────────────────────────────────────────────────────────
 
-export type CustomerType = 'RETAIL' | 'WHOLESALE';
+export type CustomerType = 'RETAIL' | 'WHOLESALE' | 'CREDIT';
+export type CustomerStatus = 'ACTIVE' | 'INACTIVE';
 
 export interface Customer {
   id: string;
@@ -499,10 +500,47 @@ export interface Customer {
   phone?: string | null;
   address?: string | null;
   type: CustomerType;
+  status: CustomerStatus;
   creditLimit?: string | null;
   currentBalance: string;
   createdAt: string;
   updatedAt: string;
+  _count?: { saleInvoices: number };
+}
+
+export interface CustomerLedgerEntry {
+  id: string;
+  customerId: string;
+  debit: string;
+  credit: string;
+  balanceAfter: string;
+  referenceType: string;
+  referenceId: string;
+  remarks?: string | null;
+  createdAt: string;
+}
+
+export interface CustomerPayment {
+  id: string;
+  customerId: string;
+  amount: string;
+  paymentMethod: string;
+  idempotencyKey?: string | null;
+  notes?: string | null;
+  receivedById: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerOutstanding {
+  customerId: string;
+  customerName: string;
+  customerType: CustomerType;
+  currentBalance: string;
+  creditLimit: string | null;
+  availableCredit: string | null;
+  unpaidInvoicesCount: number;
+  totalOutstandingAmount: string;
 }
 
 // ── Sales ─────────────────────────────────────────────────────────────────────

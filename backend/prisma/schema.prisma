@@ -76,6 +76,12 @@ enum MovementDirection {
 enum CustomerType {
   RETAIL
   WHOLESALE
+  CREDIT
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
 }
 
 // ==========================================
@@ -115,6 +121,7 @@ model User {
   rollReconciliations RollReconciliation[]
   saleInvoices        SaleInvoice[]        @relation("CashierInvoices")
   salePayments        SalePayment[]        @relation("ReceivedByPayments")
+  customerPayments    CustomerPayment[]    @relation("ReceivedByCustomerPayments")
 
   @@map("users")
 }
@@ -611,19 +618,21 @@ model Remnant {
 // ==========================================
 
 model Customer {
-  id             String       @id @default(uuid())
+  id             String         @id @default(uuid())
   name           String
-  email          String?      @unique
-  phone          String?      @unique
-  address        String?      @db.Text
-  type           CustomerType @default(RETAIL)
-  creditLimit    Decimal?     @db.Decimal(12, 2) @map("credit_limit")
-  currentBalance Decimal      @db.Decimal(12, 2) @default(0.00) @map("current_balance")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
+  email          String?        @unique
+  phone          String?        @unique
+  address        String?        @db.Text
+  type           CustomerType   @default(RETAIL)
+  status         CustomerStatus @default(ACTIVE)
+  creditLimit    Decimal?       @db.Decimal(12, 2) @map("credit_limit")
+  currentBalance Decimal        @db.Decimal(12, 2) @default(0.00) @map("current_balance")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
 
   saleInvoices          SaleInvoice[]
   customerLedgerEntries CustomerLedgerEntry[]
+  customerPayments      CustomerPayment[]
 
   @@map("customers")
 }
@@ -705,6 +714,24 @@ model SalePayment {
 
   @@index([invoiceId])
   @@map("sale_payments")
+}
+
+model CustomerPayment {
+  id             String   @id @default(uuid())
+  customerId     String   @map("customer_id")
+  amount         Decimal  @db.Decimal(12, 2)
+  paymentMethod  String   @map("payment_method")
+  idempotencyKey String?  @unique @map("idempotency_key")
+  notes          String?  @db.Text
+  receivedById   String   @map("received_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  receivedBy User     @relation("ReceivedByCustomerPayments", fields: [receivedById], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@map("customer_payments")
 }
 
 // ==========================================

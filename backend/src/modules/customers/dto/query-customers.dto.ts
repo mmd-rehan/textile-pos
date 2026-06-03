@@ -1,5 +1,5 @@
-import { IsOptional, IsPositive, IsString, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsEnum, IsInt, IsOptional, IsPositive, IsString } from 'class-validator';
 
 export class QueryCustomersDto {
   @IsOptional()
@@ -17,4 +17,12 @@ export class QueryCustomersDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsEnum(['RETAIL', 'WHOLESALE', 'CREDIT'])
+  type?: 'RETAIL' | 'WHOLESALE' | 'CREDIT';
+
+  @IsOptional()
+  @IsEnum(['ACTIVE', 'INACTIVE'])
+  status?: 'ACTIVE' | 'INACTIVE';
 }
