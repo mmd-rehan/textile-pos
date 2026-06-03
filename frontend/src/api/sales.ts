@@ -11,6 +11,14 @@ export interface SaleLineInput {
   discountAmount?: number;
 }
 
+export interface QuantitySaleLineInput {
+  productId: string;
+  productStockItemId: string;
+  quantity: number;
+  unitPrice: number;
+  discountAmount?: number;
+}
+
 export interface SalePaymentInput {
   method: string;
   amount: number;
@@ -18,7 +26,8 @@ export interface SalePaymentInput {
 
 export interface CreateRetailSaleInput {
   customerId?: string;
-  lines: SaleLineInput[];
+  lines?: SaleLineInput[];
+  quantityLines?: QuantitySaleLineInput[];
   payments: SalePaymentInput[];
   notes?: string;
 }

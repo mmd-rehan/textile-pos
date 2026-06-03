@@ -377,7 +377,39 @@ export interface RollSummaryItem {
   location?: string | null;
 }
 
-export type BarcodeLookupType = 'ROLL' | 'PRODUCT';
+export interface ProductStockItem {
+  id: string;
+  productId: string;
+  colorId?: string | null;
+  designId?: string | null;
+  barcodeValue?: string | null;
+  quantityOnHand: string;
+  unitId: string;
+  purchasePricePerUnitBaseCurrency?: string | null;
+  salePricePerUnit?: string | null;
+  location?: string | null;
+  description?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  product?: { id: string; name: string; productCode: string; productType: ProductType };
+  color?: { id: string; name: string } | null;
+  design?: { id: string; name: string } | null;
+  unit?: { id: string; name: string; abbreviation: string };
+}
+
+export interface StockItemSummary {
+  id: string;
+  quantityOnHand: string;
+  barcodeValue?: string | null;
+  salePricePerUnit?: string | null;
+  location?: string | null;
+  color?: { id: string; name: string } | null;
+  design?: { id: string; name: string } | null;
+  unit?: { id: string; name: string; abbreviation: string };
+}
+
+export type BarcodeLookupType = 'ROLL' | 'PRODUCT' | 'STOCK_ITEM';
 
 export interface BarcodeLookupResult {
   type: BarcodeLookupType;
@@ -409,8 +441,38 @@ export interface BarcodeLookupResult {
     category?: { id: string; name: string };
     color?: { id: string; name: string; colorCode?: string | null } | null;
     design?: { id: string; name: string; designCode?: string | null } | null;
-    availableRolls: RollSummaryItem[];
+    defaultUnit?: { id: string; name: string; abbreviation: string };
+    availableRolls?: RollSummaryItem[];
+    stockItems?: StockItemSummary[];
   };
+  stockItem?: {
+    id: string;
+    productId: string;
+    barcodeValue?: string | null;
+    quantityOnHand: string;
+    salePricePerUnit?: string | null;
+    location?: string | null;
+    isActive: boolean;
+    product: { id: string; name: string; productCode: string; productType: ProductType };
+    color?: { id: string; name: string } | null;
+    design?: { id: string; name: string } | null;
+    unit?: { id: string; name: string; abbreviation: string };
+  };
+}
+
+export interface POSSearchResult {
+  id: string;
+  productCode: string;
+  name: string;
+  barcode?: string | null;
+  productType: ProductType;
+  retailPrice: string;
+  wholesalePrice: string;
+  color?: { id: string; name: string } | null;
+  design?: { id: string; name: string } | null;
+  defaultUnit?: { id: string; name: string; abbreviation: string };
+  availableRolls: RollSummaryItem[];
+  stockItems: StockItemSummary[];
 }
 
 export interface StockSummaryItem {
@@ -453,10 +515,11 @@ export interface SaleInvoiceItem {
   invoiceId: string;
   productId: string;
   rollId?: string | null;
+  productStockItemId?: string | null;
   colorId?: string | null;
   designId?: string | null;
   billedQuantity: string;
-  actualCutQuantity: string;
+  actualCutQuantity?: string | null;
   unitId: string;
   unitPrice: string;
   discountAmount: string;
@@ -464,8 +527,16 @@ export interface SaleInvoiceItem {
   subTotal: string;
   createdAt: string;
   updatedAt: string;
-  product?: { id: string; name: string; productCode: string };
+  product?: { id: string; name: string; productCode: string; productType?: string };
   roll?: { id: string; rollNumber: string; barcode?: string | null } | null;
+  productStockItem?: {
+    id: string;
+    quantityOnHand: string;
+    barcodeValue?: string | null;
+    color?: { id: string; name: string } | null;
+    design?: { id: string; name: string } | null;
+    unit?: { id: string; name: string; abbreviation: string };
+  } | null;
   color?: { id: string; name: string } | null;
   design?: { id: string; name: string } | null;
   unit?: { id: string; name: string; abbreviation: string };

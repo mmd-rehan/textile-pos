@@ -21,6 +21,14 @@ export class ProductsController {
     return this.productsService.findAll(query);
   }
 
+  // Must be declared before :id to avoid route param collision
+  @Get('pos-search')
+  @RequirePermissions('read:products')
+  async posSearch(@Query('search') search: string, @Query('limit') limit?: string) {
+    const data = await this.productsService.posSearch(search, limit ? parseInt(limit, 10) : 10);
+    return createSuccessResponse(data);
+  }
+
   @Get(':id')
   @RequirePermissions('read:products')
   async findOne(@Param('id') id: string) {
@@ -88,6 +96,13 @@ export class ProductsController {
   @RequirePermissions('write:products')
   async removeDesign(@Param('id') id: string, @Param('designId') designId: string) {
     const data = await this.productsService.removeDesign(id, designId);
+    return createSuccessResponse(data);
+  }
+
+  @Get(':id/stock-items')
+  @RequirePermissions('read:products')
+  async getStockItems(@Param('id') id: string) {
+    const data = await this.productsService.getStockItems(id);
     return createSuccessResponse(data);
   }
 }

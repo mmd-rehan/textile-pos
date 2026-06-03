@@ -304,6 +304,96 @@ export class ProductsService {
     return { id };
   }
 
+  // ── POS Search ────────────────────────────────────────────────────
+
+  async posSearch(search: string, limit = 10) {
+    if (!search || search.trim().length === 0) return [];
+
+    const products = await this.prisma.product.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          { name: { contains: search } },
+          { productCode: { contains: search } },
+          { barcode: { contains: search } },
+        ],
+      },
+      select: {
+        id: true,
+        productCode: true,
+        name: true,
+        barcode: true,
+        productType: true,
+        retailPrice: true,
+        wholesalePrice: true,
+        color: { select: { id: true, name: true } },
+        design: { select: { id: true, name: true } },
+        defaultUnit: { select: { id: true, name: true, abbreviation: true } },
+        rolls: {
+          where: { status: { in: ['IN_STOCK', 'ALLOCATED'] } },
+          select: {
+            id: true,
+            rollNumber: true,
+            barcode: true,
+            status: true,
+            remainingLengthYard: true,
+            salePricePerYard: true,
+            location: true,
+            color: { select: { id: true, name: true } },
+            design: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: 'asc' as const },
+        },
+        productStockItems: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            quantityOnHand: true,
+            barcodeValue: true,
+            salePricePerUnit: true,
+            location: true,
+            color: { select: { id: true, name: true } },
+            design: { select: { id: true, name: true } },
+            unit: { select: { id: true, name: true, abbreviation: true } },
+          },
+          orderBy: { createdAt: 'asc' as const },
+        },
+      },
+      take: limit,
+      orderBy: { name: 'asc' },
+    });
+
+    return products.map((p) => ({
+      id: p.id,
+      productCode: p.productCode,
+      name: p.name,
+      barcode: p.barcode,
+      productType: p.productType,
+      retailPrice: p.retailPrice,
+      wholesalePrice: p.wholesalePrice,
+      color: p.color,
+      design: p.design,
+      defaultUnit: p.defaultUnit,
+      availableRolls: p.productType === 'FABRIC_ROLL' ? p.rolls : [],
+      stockItems: p.productType !== 'FABRIC_ROLL' ? p.productStockItems : [],
+    }));
+  }
+
+  // ── Stock Items ────────────────────────────────────────────────────
+
+  async getStockItems(productId: string) {
+    await this.findOne(productId);
+    return this.prisma.productStockItem.findMany({
+      where: { productId },
+      include: {
+        color: { select: { id: true, name: true } },
+        design: { select: { id: true, name: true } },
+        unit: { select: { id: true, name: true, abbreviation: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────
 
   private async validateForeignKeys(dto: Partial<CreateProductDto>) {

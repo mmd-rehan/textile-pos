@@ -1,6 +1,5 @@
 import { Type } from 'class-transformer';
 import {
-  ArrayMinSize,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -10,6 +9,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+// For FABRIC_ROLL products — roll-based sale line
 export class SaleLineDto {
   @IsString()
   productId!: string;
@@ -39,6 +39,28 @@ export class SaleLineDto {
   discountAmount?: number;
 }
 
+// For FIXED_PRODUCT and CUT_PIECE — quantity-based sale line
+export class QuantitySaleLineDto {
+  @IsString()
+  productId!: string;
+
+  @IsString()
+  productStockItemId!: string;
+
+  @IsNumber()
+  @IsPositive()
+  quantity!: number;
+
+  @IsNumber()
+  @Min(0)
+  unitPrice!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  discountAmount?: number;
+}
+
 export class SalePaymentDto {
   @IsString()
   method!: string;
@@ -53,10 +75,15 @@ export class CreateRetailSaleDto {
   @IsString()
   customerId?: string;
 
+  @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => SaleLineDto)
-  @ArrayMinSize(1)
-  lines!: SaleLineDto[];
+  lines?: SaleLineDto[];
+
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => QuantitySaleLineDto)
+  quantityLines?: QuantitySaleLineDto[];
 
   @ValidateNested({ each: true })
   @Type(() => SalePaymentDto)

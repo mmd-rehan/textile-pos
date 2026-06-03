@@ -1,4 +1,15 @@
 -- CreateTable
+CREATE TABLE `currencies` (
+    `code` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `symbol` VARCHAR(191) NOT NULL,
+    `is_base_currency` BOOLEAN NOT NULL DEFAULT false,
+    `is_active` BOOLEAN NOT NULL DEFAULT true,
+
+    PRIMARY KEY (`code`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `users` (
     `id` VARCHAR(191) NOT NULL,
     `username` VARCHAR(191) NOT NULL,
@@ -142,6 +153,7 @@ CREATE TABLE `categories` (
     `name` VARCHAR(191) NOT NULL,
     `description` VARCHAR(191) NULL,
     `parent_id` VARCHAR(191) NULL,
+    `is_active` BOOLEAN NOT NULL DEFAULT true,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
@@ -153,31 +165,65 @@ CREATE TABLE `brands` (
     `id` VARCHAR(191) NOT NULL,
     `name` VARCHAR(191) NOT NULL,
     `description` VARCHAR(191) NULL,
+    `is_active` BOOLEAN NOT NULL DEFAULT true,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
+    UNIQUE INDEX `brands_name_key`(`name`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `colors` (
+    `id` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `color_code` VARCHAR(191) NULL,
+    `hex_code` VARCHAR(191) NULL,
+    `is_active` BOOLEAN NOT NULL DEFAULT true,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `colors_name_key`(`name`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `designs` (
+    `id` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `design_code` VARCHAR(191) NULL,
+    `description` TEXT NULL,
+    `is_active` BOOLEAN NOT NULL DEFAULT true,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `designs_name_key`(`name`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `products` (
     `id` VARCHAR(191) NOT NULL,
+    `product_code` VARCHAR(191) NOT NULL,
     `name` VARCHAR(191) NOT NULL,
-    `sku` VARCHAR(191) NOT NULL,
     `barcode` VARCHAR(191) NULL,
     `description` VARCHAR(191) NULL,
-    `type` ENUM('FABRIC', 'READY_MADE', 'ACCESSORY') NOT NULL DEFAULT 'FABRIC',
+    `product_type` ENUM('FABRIC_ROLL', 'CUT_PIECE', 'FIXED_PRODUCT') NOT NULL,
     `category_id` VARCHAR(191) NOT NULL,
     `brand_id` VARCHAR(191) NULL,
-    `unit_id` VARCHAR(191) NOT NULL,
-    `price` DECIMAL(12, 2) NOT NULL,
-    `cost` DECIMAL(12, 2) NOT NULL,
+    `color_id` VARCHAR(191) NULL,
+    `design_id` VARCHAR(191) NULL,
+    `default_unit_id` VARCHAR(191) NOT NULL,
+    `retail_price` DECIMAL(12, 2) NOT NULL,
+    `wholesale_price` DECIMAL(12, 2) NOT NULL,
+    `status` ENUM('ACTIVE', 'INACTIVE', 'DISCONTINUED') NOT NULL DEFAULT 'ACTIVE',
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
-    UNIQUE INDEX `products_sku_key`(`sku`),
+    UNIQUE INDEX `products_product_code_key`(`product_code`),
     UNIQUE INDEX `products_barcode_key`(`barcode`),
     INDEX `products_barcode_idx`(`barcode`),
+    INDEX `products_product_code_idx`(`product_code`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -185,11 +231,10 @@ CREATE TABLE `products` (
 CREATE TABLE `product_colors` (
     `id` VARCHAR(191) NOT NULL,
     `product_id` VARCHAR(191) NOT NULL,
-    `color_name` VARCHAR(191) NOT NULL,
-    `color_code` VARCHAR(191) NULL,
+    `color_id` VARCHAR(191) NOT NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updated_at` DATETIME(3) NOT NULL,
 
+    UNIQUE INDEX `product_colors_product_id_color_id_key`(`product_id`, `color_id`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -197,11 +242,10 @@ CREATE TABLE `product_colors` (
 CREATE TABLE `product_designs` (
     `id` VARCHAR(191) NOT NULL,
     `product_id` VARCHAR(191) NOT NULL,
-    `design_name` VARCHAR(191) NOT NULL,
-    `design_code` VARCHAR(191) NULL,
+    `design_id` VARCHAR(191) NOT NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updated_at` DATETIME(3) NOT NULL,
 
+    UNIQUE INDEX `product_designs_product_id_design_id_key`(`product_id`, `design_id`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -213,6 +257,7 @@ CREATE TABLE `units` (
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
+    UNIQUE INDEX `units_name_key`(`name`),
     UNIQUE INDEX `units_abbreviation_key`(`abbreviation`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -226,6 +271,7 @@ CREATE TABLE `unit_conversions` (
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
+    UNIQUE INDEX `unit_conversions_from_unit_id_to_unit_id_key`(`from_unit_id`, `to_unit_id`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -234,6 +280,8 @@ CREATE TABLE `batches` (
     `id` VARCHAR(191) NOT NULL,
     `batch_number` VARCHAR(191) NOT NULL,
     `supplier_id` VARCHAR(191) NULL,
+    `notes` TEXT NULL,
+    `received_at` DATETIME(3) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
@@ -252,6 +300,9 @@ CREATE TABLE `rolls` (
     `batch_id` VARCHAR(191) NULL,
     `original_length_yard` DECIMAL(12, 4) NOT NULL,
     `remaining_length_yard` DECIMAL(12, 4) NOT NULL,
+    `purchase_price_per_yard_original_ccy` DECIMAL(14, 2) NULL,
+    `purchase_price_per_yard_base_ccy` DECIMAL(14, 2) NULL,
+    `sale_price_per_yard` DECIMAL(12, 2) NULL,
     `status` ENUM('IN_STOCK', 'ALLOCATED', 'SOLD', 'WASTED', 'DAMAGED') NOT NULL DEFAULT 'IN_STOCK',
     `location` VARCHAR(191) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -265,10 +316,34 @@ CREATE TABLE `rolls` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `product_stock_items` (
+    `id` VARCHAR(191) NOT NULL,
+    `product_id` VARCHAR(191) NOT NULL,
+    `color_id` VARCHAR(191) NULL,
+    `design_id` VARCHAR(191) NULL,
+    `barcode_value` VARCHAR(191) NULL,
+    `quantity_on_hand` DECIMAL(12, 4) NOT NULL,
+    `unit_id` VARCHAR(191) NOT NULL,
+    `purchase_price_per_unit_base_ccy` DECIMAL(14, 2) NULL,
+    `sale_price_per_unit` DECIMAL(12, 2) NULL,
+    `location` VARCHAR(191) NULL,
+    `description` TEXT NULL,
+    `is_active` BOOLEAN NOT NULL DEFAULT true,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `product_stock_items_barcode_value_key`(`barcode_value`),
+    INDEX `product_stock_items_product_id_idx`(`product_id`),
+    INDEX `product_stock_items_barcode_value_idx`(`barcode_value`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `inventory_movements` (
     `id` VARCHAR(191) NOT NULL,
     `product_id` VARCHAR(191) NOT NULL,
     `roll_id` VARCHAR(191) NULL,
+    `product_stock_item_id` VARCHAR(191) NULL,
     `movement_type` ENUM('PURCHASE', 'SALE', 'ADJUSTMENT', 'WASTAGE', 'RECONCILIATION', 'RETURN') NOT NULL,
     `direction` ENUM('IN', 'OUT') NOT NULL,
     `quantity` DECIMAL(12, 4) NOT NULL,
@@ -282,6 +357,7 @@ CREATE TABLE `inventory_movements` (
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     INDEX `inventory_movements_roll_id_idx`(`roll_id`),
+    INDEX `inventory_movements_product_stock_item_id_idx`(`product_stock_item_id`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -378,10 +454,12 @@ CREATE TABLE `sale_invoices` (
     `sale_type` ENUM('WHOLESALE', 'RETAIL') NOT NULL DEFAULT 'RETAIL',
     `cashier_id` VARCHAR(191) NOT NULL,
     `notes` TEXT NULL,
+    `idempotency_key` VARCHAR(191) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `sale_invoices_invoice_number_key`(`invoice_number`),
+    UNIQUE INDEX `sale_invoices_idempotency_key_key`(`idempotency_key`),
     INDEX `sale_invoices_invoice_number_idx`(`invoice_number`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -392,10 +470,11 @@ CREATE TABLE `sale_invoice_items` (
     `invoice_id` VARCHAR(191) NOT NULL,
     `product_id` VARCHAR(191) NOT NULL,
     `roll_id` VARCHAR(191) NULL,
+    `product_stock_item_id` VARCHAR(191) NULL,
     `color_id` VARCHAR(191) NULL,
     `design_id` VARCHAR(191) NULL,
     `billed_quantity` DECIMAL(12, 4) NOT NULL,
-    `actual_cut_quantity` DECIMAL(12, 4) NOT NULL,
+    `actual_cut_quantity` DECIMAL(12, 4) NULL,
     `unit_id` VARCHAR(191) NOT NULL,
     `unit_price` DECIMAL(12, 2) NOT NULL,
     `discount_amount` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
@@ -406,6 +485,7 @@ CREATE TABLE `sale_invoice_items` (
 
     INDEX `sale_invoice_items_roll_id_idx`(`roll_id`),
     INDEX `sale_invoice_items_invoice_id_idx`(`invoice_id`),
+    INDEX `sale_invoice_items_product_stock_item_id_idx`(`product_stock_item_id`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -448,7 +528,18 @@ CREATE TABLE `purchase_orders` (
     `id` VARCHAR(191) NOT NULL,
     `po_number` VARCHAR(191) NOT NULL,
     `supplier_id` VARCHAR(191) NOT NULL,
-    `total_amount` DECIMAL(12, 2) NOT NULL,
+    `purchase_currency_code` VARCHAR(191) NOT NULL DEFAULT 'PKR',
+    `exchange_rate_to_base_currency` DECIMAL(18, 6) NOT NULL DEFAULT 1.000000,
+    `subtotal_original_ccy` DECIMAL(14, 2) NOT NULL,
+    `discount_original_ccy` DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    `tax_original_ccy` DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    `total_original_ccy` DECIMAL(14, 2) NOT NULL,
+    `subtotal_base_ccy` DECIMAL(14, 2) NOT NULL,
+    `discount_base_ccy` DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    `tax_base_ccy` DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    `total_base_ccy` DECIMAL(14, 2) NOT NULL,
+    `paid_amount_original_ccy` DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    `due_amount_original_ccy` DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
     `status` ENUM('DRAFT', 'SENT', 'PAID', 'PARTIALLY_PAID', 'UNPAID', 'CANCELLED') NOT NULL DEFAULT 'DRAFT',
     `order_date` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `delivery_date` DATETIME(3) NULL,
@@ -462,15 +553,38 @@ CREATE TABLE `purchase_orders` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `supplier_payments` (
+    `id` VARCHAR(191) NOT NULL,
+    `purchase_order_id` VARCHAR(191) NOT NULL,
+    `supplier_id` VARCHAR(191) NOT NULL,
+    `amount_original_ccy` DECIMAL(14, 2) NOT NULL,
+    `amount_base_ccy` DECIMAL(14, 2) NOT NULL,
+    `currency_code` VARCHAR(191) NOT NULL,
+    `exchange_rate_to_base_currency` DECIMAL(18, 6) NOT NULL DEFAULT 1.000000,
+    `payment_method` VARCHAR(191) NOT NULL,
+    `payment_date` DATETIME(3) NOT NULL,
+    `notes` TEXT NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    INDEX `supplier_payments_purchase_order_id_idx`(`purchase_order_id`),
+    INDEX `supplier_payments_supplier_id_idx`(`supplier_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `purchase_items` (
     `id` VARCHAR(191) NOT NULL,
     `purchase_order_id` VARCHAR(191) NOT NULL,
     `product_id` VARCHAR(191) NOT NULL,
+    `product_stock_item_id` VARCHAR(191) NULL,
     `ordered_quantity` DECIMAL(12, 4) NOT NULL,
     `received_quantity` DECIMAL(12, 4) NOT NULL DEFAULT 0.00,
     `unit_id` VARCHAR(191) NOT NULL,
-    `unit_cost` DECIMAL(12, 2) NOT NULL,
-    `sub_total` DECIMAL(12, 2) NOT NULL,
+    `unit_cost_original_ccy` DECIMAL(14, 2) NOT NULL,
+    `line_total_original_ccy` DECIMAL(14, 2) NOT NULL,
+    `unit_cost_base_ccy` DECIMAL(14, 2) NOT NULL,
+    `line_total_base_ccy` DECIMAL(14, 2) NOT NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
@@ -482,7 +596,8 @@ CREATE TABLE `purchase_rolls` (
     `id` VARCHAR(191) NOT NULL,
     `purchase_order_id` VARCHAR(191) NOT NULL,
     `roll_id` VARCHAR(191) NOT NULL,
-    `unit_cost` DECIMAL(12, 2) NOT NULL,
+    `purchase_price_per_unit_original_ccy` DECIMAL(14, 2) NOT NULL,
+    `purchase_price_per_unit_base_ccy` DECIMAL(14, 2) NOT NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
@@ -510,9 +625,13 @@ CREATE TABLE `customer_ledger_entries` (
 CREATE TABLE `supplier_ledger_entries` (
     `id` VARCHAR(191) NOT NULL,
     `supplier_id` VARCHAR(191) NOT NULL,
-    `debit` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
-    `credit` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
-    `balance_after` DECIMAL(12, 2) NOT NULL,
+    `currency_code` VARCHAR(191) NOT NULL,
+    `debit_original_ccy` DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    `credit_original_ccy` DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    `exchange_rate_to_base_currency` DECIMAL(18, 6) NOT NULL,
+    `debit_base_ccy` DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    `credit_base_ccy` DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    `balance_after_base` DECIMAL(14, 2) NOT NULL,
     `reference_type` VARCHAR(191) NOT NULL,
     `reference_id` VARCHAR(191) NOT NULL,
     `remarks` TEXT NULL,
@@ -554,13 +673,25 @@ ALTER TABLE `products` ADD CONSTRAINT `products_category_id_fkey` FOREIGN KEY (`
 ALTER TABLE `products` ADD CONSTRAINT `products_brand_id_fkey` FOREIGN KEY (`brand_id`) REFERENCES `brands`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `products` ADD CONSTRAINT `products_unit_id_fkey` FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `products` ADD CONSTRAINT `products_color_id_fkey` FOREIGN KEY (`color_id`) REFERENCES `colors`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `products` ADD CONSTRAINT `products_design_id_fkey` FOREIGN KEY (`design_id`) REFERENCES `designs`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `products` ADD CONSTRAINT `products_default_unit_id_fkey` FOREIGN KEY (`default_unit_id`) REFERENCES `units`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `product_colors` ADD CONSTRAINT `product_colors_product_id_fkey` FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `product_colors` ADD CONSTRAINT `product_colors_color_id_fkey` FOREIGN KEY (`color_id`) REFERENCES `colors`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `product_designs` ADD CONSTRAINT `product_designs_product_id_fkey` FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `product_designs` ADD CONSTRAINT `product_designs_design_id_fkey` FOREIGN KEY (`design_id`) REFERENCES `designs`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `unit_conversions` ADD CONSTRAINT `unit_conversions_from_unit_id_fkey` FOREIGN KEY (`from_unit_id`) REFERENCES `units`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
@@ -575,19 +706,34 @@ ALTER TABLE `batches` ADD CONSTRAINT `batches_supplier_id_fkey` FOREIGN KEY (`su
 ALTER TABLE `rolls` ADD CONSTRAINT `rolls_product_id_fkey` FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `rolls` ADD CONSTRAINT `rolls_color_id_fkey` FOREIGN KEY (`color_id`) REFERENCES `product_colors`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `rolls` ADD CONSTRAINT `rolls_color_id_fkey` FOREIGN KEY (`color_id`) REFERENCES `colors`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `rolls` ADD CONSTRAINT `rolls_design_id_fkey` FOREIGN KEY (`design_id`) REFERENCES `product_designs`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `rolls` ADD CONSTRAINT `rolls_design_id_fkey` FOREIGN KEY (`design_id`) REFERENCES `designs`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `rolls` ADD CONSTRAINT `rolls_batch_id_fkey` FOREIGN KEY (`batch_id`) REFERENCES `batches`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `product_stock_items` ADD CONSTRAINT `product_stock_items_product_id_fkey` FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `product_stock_items` ADD CONSTRAINT `product_stock_items_color_id_fkey` FOREIGN KEY (`color_id`) REFERENCES `colors`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `product_stock_items` ADD CONSTRAINT `product_stock_items_design_id_fkey` FOREIGN KEY (`design_id`) REFERENCES `designs`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `product_stock_items` ADD CONSTRAINT `product_stock_items_unit_id_fkey` FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `inventory_movements` ADD CONSTRAINT `inventory_movements_product_id_fkey` FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `inventory_movements` ADD CONSTRAINT `inventory_movements_roll_id_fkey` FOREIGN KEY (`roll_id`) REFERENCES `rolls`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `inventory_movements` ADD CONSTRAINT `inventory_movements_product_stock_item_id_fkey` FOREIGN KEY (`product_stock_item_id`) REFERENCES `product_stock_items`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `inventory_movements` ADD CONSTRAINT `inventory_movements_unit_id_fkey` FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -644,10 +790,13 @@ ALTER TABLE `sale_invoice_items` ADD CONSTRAINT `sale_invoice_items_product_id_f
 ALTER TABLE `sale_invoice_items` ADD CONSTRAINT `sale_invoice_items_roll_id_fkey` FOREIGN KEY (`roll_id`) REFERENCES `rolls`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `sale_invoice_items` ADD CONSTRAINT `sale_invoice_items_color_id_fkey` FOREIGN KEY (`color_id`) REFERENCES `product_colors`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `sale_invoice_items` ADD CONSTRAINT `sale_invoice_items_product_stock_item_id_fkey` FOREIGN KEY (`product_stock_item_id`) REFERENCES `product_stock_items`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `sale_invoice_items` ADD CONSTRAINT `sale_invoice_items_design_id_fkey` FOREIGN KEY (`design_id`) REFERENCES `product_designs`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `sale_invoice_items` ADD CONSTRAINT `sale_invoice_items_color_id_fkey` FOREIGN KEY (`color_id`) REFERENCES `colors`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `sale_invoice_items` ADD CONSTRAINT `sale_invoice_items_design_id_fkey` FOREIGN KEY (`design_id`) REFERENCES `designs`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `sale_invoice_items` ADD CONSTRAINT `sale_invoice_items_unit_id_fkey` FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -662,6 +811,12 @@ ALTER TABLE `sale_payments` ADD CONSTRAINT `sale_payments_received_by_id_fkey` F
 ALTER TABLE `purchase_orders` ADD CONSTRAINT `purchase_orders_supplier_id_fkey` FOREIGN KEY (`supplier_id`) REFERENCES `suppliers`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `supplier_payments` ADD CONSTRAINT `supplier_payments_purchase_order_id_fkey` FOREIGN KEY (`purchase_order_id`) REFERENCES `purchase_orders`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `supplier_payments` ADD CONSTRAINT `supplier_payments_supplier_id_fkey` FOREIGN KEY (`supplier_id`) REFERENCES `suppliers`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `purchase_items` ADD CONSTRAINT `purchase_items_purchase_order_id_fkey` FOREIGN KEY (`purchase_order_id`) REFERENCES `purchase_orders`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -669,6 +824,9 @@ ALTER TABLE `purchase_items` ADD CONSTRAINT `purchase_items_product_id_fkey` FOR
 
 -- AddForeignKey
 ALTER TABLE `purchase_items` ADD CONSTRAINT `purchase_items_unit_id_fkey` FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `purchase_items` ADD CONSTRAINT `purchase_items_product_stock_item_id_fkey` FOREIGN KEY (`product_stock_item_id`) REFERENCES `product_stock_items`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `purchase_rolls` ADD CONSTRAINT `purchase_rolls_purchase_order_id_fkey` FOREIGN KEY (`purchase_order_id`) REFERENCES `purchase_orders`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
@@ -681,3 +839,4 @@ ALTER TABLE `customer_ledger_entries` ADD CONSTRAINT `customer_ledger_entries_cu
 
 -- AddForeignKey
 ALTER TABLE `supplier_ledger_entries` ADD CONSTRAINT `supplier_ledger_entries_supplier_id_fkey` FOREIGN KEY (`supplier_id`) REFERENCES `suppliers`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+

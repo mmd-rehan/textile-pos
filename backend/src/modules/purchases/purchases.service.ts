@@ -13,8 +13,19 @@ const PO_INCLUDE = {
   supplier: { select: { id: true, name: true, contactName: true } },
   purchaseItems: {
     include: {
-      product: { select: { id: true, name: true, productCode: true } },
+      product: { select: { id: true, name: true, productCode: true, productType: true } },
       unit: { select: { id: true, name: true, abbreviation: true } },
+      productStockItem: {
+        select: {
+          id: true,
+          quantityOnHand: true,
+          barcodeValue: true,
+          salePricePerUnit: true,
+          location: true,
+          color: { select: { id: true, name: true } },
+          design: { select: { id: true, name: true } },
+        },
+      },
     },
   },
   purchaseRolls: {
@@ -38,7 +49,7 @@ const PO_INCLUDE = {
       },
     },
   },
-  _count: { select: { purchaseRolls: true } },
+  _count: { select: { purchaseRolls: true, purchaseItems: true } },
 } as const;
 
 @Injectable()
@@ -65,7 +76,7 @@ export class PurchasesService {
         where,
         include: {
           supplier: { select: { id: true, name: true } },
-          _count: { select: { purchaseRolls: true } },
+          _count: { select: { purchaseRolls: true, purchaseItems: true } },
         },
         skip,
         take: limit,
@@ -87,28 +98,22 @@ export class PurchasesService {
   }
 
   async create(dto: CreatePurchaseDto, userId: string) {
-    const rollNumbers = dto.rolls.map(() => this.generateRollNumber());
-    const barcodes = dto.rolls.map(() => this.generateBarcode());
+    const hasRolls = (dto.rolls?.length ?? 0) > 0;
+    const hasItems = (dto.items?.length ?? 0) > 0;
+    if (!hasRolls && !hasItems) {
+      throw AppError.badRequest('Purchase must contain at least one roll or item line', 'EMPTY_PURCHASE');
+    }
+
+    const rollNumbers = (dto.rolls ?? []).map(() => this.generateRollNumber());
+    const barcodes = (dto.rolls ?? []).map(() => this.generateBarcode());
 
     const createdPoId = await this.prisma.$transaction(async (tx) => {
       const supplier = await tx.supplier.findUnique({ where: { id: dto.supplierId } });
       if (!supplier) throw AppError.notFound('Supplier not found', 'SUPPLIER_NOT_FOUND');
 
-      const productIds = [...new Set(dto.rolls.map((r) => r.productId))];
-      const products = await tx.product.findMany({
-        where: { id: { in: productIds } },
-        select: { id: true, defaultUnitId: true, name: true },
-      });
-      if (products.length !== productIds.length) {
-        throw AppError.badRequest('One or more products not found', 'PRODUCT_NOT_FOUND');
-      }
-      const productUnitMap = new Map(products.map((p) => [p.id, p.defaultUnitId]));
-
       // ── Currency / exchange rate resolution ──────────────────────────────
       const currencyCode = dto.currency ?? BASE_CURRENCY_CODE;
       const isBaseCurrency = currencyCode === BASE_CURRENCY_CODE;
-
-      // Exchange rate: 1.0 for base currency, user-supplied for foreign currency
       const exchangeRate = isBaseCurrency
         ? new Prisma.Decimal(1)
         : new Prisma.Decimal(dto.exchangeRateToBaseCurrency ?? 1);
@@ -120,7 +125,7 @@ export class PurchasesService {
         );
       }
 
-      // ── Batch handling ────────────────────────────────────────────────────
+      // ── Batch handling (relevant for FABRIC_ROLL) ─────────────────────────
       let batchId = dto.batchId ?? null;
       if (!batchId && dto.batchNumber) {
         const existing = await tx.batch.findUnique({ where: { batchNumber: dto.batchNumber } });
@@ -139,8 +144,11 @@ export class PurchasesService {
         }
       }
 
-      // ── Roll data with Decimal arithmetic ────────────────────────────────
-      const rollsData = dto.rolls.map((r) => {
+      let subtotalOriginal = new Prisma.Decimal(0);
+      let subtotalBase = new Prisma.Decimal(0);
+
+      // ── Process roll lines (FABRIC_ROLL) ─────────────────────────────────
+      const rollsData = (dto.rolls ?? []).map((r) => {
         const originalLength = new Prisma.Decimal(r.originalLengthYard);
         const priceOriginal = new Prisma.Decimal(r.purchasePricePerYard);
         const priceBase = priceOriginal.times(exchangeRate).toDecimalPlaces(2);
@@ -148,20 +156,110 @@ export class PurchasesService {
         return { ...r, originalLength, priceOriginal, priceBase, salePrice };
       });
 
-      // ── PO-level totals ───────────────────────────────────────────────────
-      const subtotalOriginal = rollsData.reduce(
-        (sum, r) => sum.plus(r.originalLength.times(r.priceOriginal)),
-        new Prisma.Decimal(0),
-      ).toDecimalPlaces(2);
+      if (hasRolls) {
+        const productIds = [...new Set(rollsData.map((r) => r.productId))];
+        const products = await tx.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, defaultUnitId: true, name: true, productType: true },
+        });
+        if (products.length !== productIds.length) {
+          throw AppError.badRequest('One or more roll products not found', 'PRODUCT_NOT_FOUND');
+        }
+        for (const p of products) {
+          if (p.productType !== 'FABRIC_ROLL') {
+            throw AppError.badRequest(
+              `Product "${p.name}" is not a FABRIC_ROLL — use the items array for non-roll products`,
+              'WRONG_PRODUCT_TYPE_FOR_ROLL',
+            );
+          }
+        }
+        const productUnitMap = new Map(products.map((p) => [p.id, p.defaultUnitId]));
 
-      const subtotalBase = rollsData.reduce(
-        (sum, r) => sum.plus(r.originalLength.times(r.priceBase)),
-        new Prisma.Decimal(0),
-      ).toDecimalPlaces(2);
+        subtotalOriginal = rollsData.reduce(
+          (sum, r) => sum.plus(r.originalLength.times(r.priceOriginal)),
+          new Prisma.Decimal(0),
+        ).toDecimalPlaces(2);
+        subtotalBase = rollsData.reduce(
+          (sum, r) => sum.plus(r.originalLength.times(r.priceBase)),
+          new Prisma.Decimal(0),
+        ).toDecimalPlaces(2);
 
-      const totalOriginal = subtotalOriginal; // no discount/tax yet
+        // Create PO first so we can reference it in rolls
+        // (PO created after items loop, combined total)
+      }
+
+      // ── Process item lines (FIXED_PRODUCT / CUT_PIECE) ───────────────────
+      type ItemProcessed = {
+        productId: string;
+        unitId: string;
+        qty: Prisma.Decimal;
+        priceOriginal: Prisma.Decimal;
+        priceBase: Prisma.Decimal;
+        salePrice: Prisma.Decimal;
+        colorId: string | null;
+        designId: string | null;
+        barcodeValue: string | null;
+        location: string | null;
+        description: string | null;
+      };
+      const itemsData: ItemProcessed[] = [];
+
+      if (hasItems) {
+        const itemProductIds = [...new Set((dto.items ?? []).map((i) => i.productId))];
+        const itemProducts = await tx.product.findMany({
+          where: { id: { in: itemProductIds } },
+          select: { id: true, defaultUnitId: true, name: true, productType: true },
+        });
+        if (itemProducts.length !== itemProductIds.length) {
+          throw AppError.badRequest('One or more item products not found', 'PRODUCT_NOT_FOUND');
+        }
+        for (const p of itemProducts) {
+          if (p.productType === 'FABRIC_ROLL') {
+            throw AppError.badRequest(
+              `Product "${p.name}" is FABRIC_ROLL — use the rolls array for roll-based products`,
+              'WRONG_PRODUCT_TYPE_FOR_ITEM',
+            );
+          }
+        }
+        const itemProductUnitMap = new Map(itemProducts.map((p) => [p.id, p.defaultUnitId]));
+
+        for (const item of dto.items ?? []) {
+          const qty = new Prisma.Decimal(item.quantity);
+          const priceOriginal = new Prisma.Decimal(item.purchasePricePerUnit);
+          const priceBase = priceOriginal.times(exchangeRate).toDecimalPlaces(2);
+          const salePrice = new Prisma.Decimal(item.salePricePerUnit);
+          const unitId = item.unitId ?? itemProductUnitMap.get(item.productId)!;
+
+          itemsData.push({
+            productId: item.productId,
+            unitId,
+            qty,
+            priceOriginal,
+            priceBase,
+            salePrice,
+            colorId: item.colorId ?? null,
+            designId: item.designId ?? null,
+            barcodeValue: item.barcodeValue ?? null,
+            location: item.location ?? null,
+            description: item.description ?? null,
+          });
+        }
+
+        const itemsSubtotalOriginal = itemsData.reduce(
+          (sum, i) => sum.plus(i.qty.times(i.priceOriginal)),
+          new Prisma.Decimal(0),
+        ).toDecimalPlaces(2);
+        const itemsSubtotalBase = itemsData.reduce(
+          (sum, i) => sum.plus(i.qty.times(i.priceBase)),
+          new Prisma.Decimal(0),
+        ).toDecimalPlaces(2);
+
+        subtotalOriginal = subtotalOriginal.plus(itemsSubtotalOriginal).toDecimalPlaces(2);
+        subtotalBase = subtotalBase.plus(itemsSubtotalBase).toDecimalPlaces(2);
+      }
+
+      const totalOriginal = subtotalOriginal;
       const totalBase = subtotalBase;
-
       const paidAmountOriginal = new Prisma.Decimal(dto.paidAmount ?? 0);
       const payableOriginal = totalOriginal.minus(paidAmountOriginal);
 
@@ -170,10 +268,10 @@ export class PurchasesService {
       else if (paidAmountOriginal.gt(0)) status = InvoiceStatus.PARTIALLY_PAID;
       else status = InvoiceStatus.UNPAID;
 
-      // ── Create PurchaseOrder ──────────────────────────────────────────────
       const poNumber = await this.generatePoNumber(tx);
       const paidBase = paidAmountOriginal.times(exchangeRate).toDecimalPlaces(2);
       const dueOriginal = payableOriginal.lte(0) ? new Prisma.Decimal(0) : payableOriginal;
+
       const po = await tx.purchaseOrder.create({
         data: {
           poNumber,
@@ -192,118 +290,211 @@ export class PurchasesService {
           notes: dto.notes,
         },
       });
-      void paidBase; // stored on PO for reference; ledger uses base amounts
+      void paidBase;
 
-      // ── Create Rolls + PurchaseRolls + InventoryMovements ────────────────
-      for (let i = 0; i < rollsData.length; i++) {
-        const r = rollsData[i];
-        const unitId = productUnitMap.get(r.productId)!;
-
-        // Find the yard unit ID for inventory movements (rolls are always measured in yards)
-        const yardUnit = await tx.unit.findFirst({ where: { abbreviation: 'yd' } });
-        const movementUnitId = yardUnit?.id ?? unitId;
-
-        const roll = await tx.roll.create({
-          data: {
-            rollNumber: rollNumbers[i],
-            barcode: barcodes[i],
-            productId: r.productId,
-            colorId: r.colorId ?? null,
-            designId: r.designId ?? null,
-            batchId,
-            originalLengthYard: r.originalLength,
-            remainingLengthYard: r.originalLength,
-            purchasePricePerYardOriginalCurrency: r.priceOriginal,
-            purchasePricePerYardBaseCurrency: r.priceBase,
-            salePricePerYard: r.salePrice,
-            status: 'IN_STOCK',
-            location: r.location ?? null,
-          },
+      // ── Create Rolls + PurchaseRolls + InventoryMovements (roll lines) ────
+      if (hasRolls) {
+        // Re-derive productUnitMap (needed here since it was local to hasRolls block)
+        const productIds = [...new Set(rollsData.map((r) => r.productId))];
+        const products = await tx.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, defaultUnitId: true },
         });
+        const productUnitMap = new Map(products.map((p) => [p.id, p.defaultUnitId]));
 
-        await tx.purchaseRoll.create({
-          data: {
-            purchaseOrderId: po.id,
-            rollId: roll.id,
-            purchasePricePerUnitOriginalCurrency: r.priceOriginal,
-            purchasePricePerUnitBaseCurrency: r.priceBase,
-          },
-        });
+        for (let i = 0; i < rollsData.length; i++) {
+          const r = rollsData[i];
+          const unitId = productUnitMap.get(r.productId)!;
+          const yardUnit = await tx.unit.findFirst({ where: { abbreviation: 'yd' } });
+          const movementUnitId = yardUnit?.id ?? unitId;
 
-        await tx.inventoryMovement.create({
-          data: {
-            productId: r.productId,
-            rollId: roll.id,
-            movementType: 'PURCHASE',
-            direction: 'IN',
-            quantity: r.originalLength,
-            unitId: movementUnitId,
-            beforeQuantity: new Prisma.Decimal(0),
-            afterQuantity: r.originalLength,
-            referenceType: 'PURCHASE_ORDER',
-            referenceId: po.id,
-            remarks: `Purchase from PO ${poNumber}`,
-            userId,
-          },
-        });
-      }
-
-      // ── Aggregate PurchaseItems per product ───────────────────────────────
-      const productItemMap = new Map<
-        string,
-        {
-          qty: Prisma.Decimal;
-          costOriginal: Prisma.Decimal;
-          costBase: Prisma.Decimal;
-          lineTotalOriginal: Prisma.Decimal;
-          lineTotalBase: Prisma.Decimal;
-          unitId: string;
-        }
-      >();
-
-      for (const r of rollsData) {
-        const unitId = productUnitMap.get(r.productId)!;
-        const lineOriginal = r.originalLength.times(r.priceOriginal);
-        const lineBase = r.originalLength.times(r.priceBase);
-        const existing = productItemMap.get(r.productId);
-        if (existing) {
-          productItemMap.set(r.productId, {
-            qty: existing.qty.plus(r.originalLength),
-            costOriginal: r.priceOriginal,
-            costBase: r.priceBase,
-            lineTotalOriginal: existing.lineTotalOriginal.plus(lineOriginal),
-            lineTotalBase: existing.lineTotalBase.plus(lineBase),
-            unitId,
+          const roll = await tx.roll.create({
+            data: {
+              rollNumber: rollNumbers[i],
+              barcode: barcodes[i],
+              productId: r.productId,
+              colorId: r.colorId ?? null,
+              designId: r.designId ?? null,
+              batchId,
+              originalLengthYard: r.originalLength,
+              remainingLengthYard: r.originalLength,
+              purchasePricePerYardOriginalCurrency: r.priceOriginal,
+              purchasePricePerYardBaseCurrency: r.priceBase,
+              salePricePerYard: r.salePrice,
+              status: 'IN_STOCK',
+              location: r.location ?? null,
+            },
           });
-        } else {
-          productItemMap.set(r.productId, {
-            qty: r.originalLength,
-            costOriginal: r.priceOriginal,
-            costBase: r.priceBase,
-            lineTotalOriginal: lineOriginal,
-            lineTotalBase: lineBase,
-            unitId,
+
+          await tx.purchaseRoll.create({
+            data: {
+              purchaseOrderId: po.id,
+              rollId: roll.id,
+              purchasePricePerUnitOriginalCurrency: r.priceOriginal,
+              purchasePricePerUnitBaseCurrency: r.priceBase,
+            },
+          });
+
+          await tx.inventoryMovement.create({
+            data: {
+              productId: r.productId,
+              rollId: roll.id,
+              movementType: 'PURCHASE',
+              direction: 'IN',
+              quantity: r.originalLength,
+              unitId: movementUnitId,
+              beforeQuantity: new Prisma.Decimal(0),
+              afterQuantity: r.originalLength,
+              referenceType: 'PURCHASE_ORDER',
+              referenceId: po.id,
+              remarks: `Purchase from PO ${poNumber}`,
+              userId,
+            },
           });
         }
+
+        // Aggregate PurchaseItems per product for roll lines
+        const productItemMap = new Map<
+          string,
+          {
+            qty: Prisma.Decimal;
+            costOriginal: Prisma.Decimal;
+            costBase: Prisma.Decimal;
+            lineTotalOriginal: Prisma.Decimal;
+            lineTotalBase: Prisma.Decimal;
+            unitId: string;
+          }
+        >();
+
+        for (const r of rollsData) {
+          const unitId = new Map(
+            (await tx.product.findMany({ where: { id: r.productId }, select: { id: true, defaultUnitId: true } }))
+              .map((p) => [p.id, p.defaultUnitId]),
+          ).get(r.productId)!;
+          const lineOriginal = r.originalLength.times(r.priceOriginal);
+          const lineBase = r.originalLength.times(r.priceBase);
+          const existing = productItemMap.get(r.productId);
+          if (existing) {
+            productItemMap.set(r.productId, {
+              qty: existing.qty.plus(r.originalLength),
+              costOriginal: r.priceOriginal,
+              costBase: r.priceBase,
+              lineTotalOriginal: existing.lineTotalOriginal.plus(lineOriginal),
+              lineTotalBase: existing.lineTotalBase.plus(lineBase),
+              unitId,
+            });
+          } else {
+            productItemMap.set(r.productId, {
+              qty: r.originalLength,
+              costOriginal: r.priceOriginal,
+              costBase: r.priceBase,
+              lineTotalOriginal: lineOriginal,
+              lineTotalBase: lineBase,
+              unitId,
+            });
+          }
+        }
+
+        for (const [productId, item] of productItemMap.entries()) {
+          await tx.purchaseItem.create({
+            data: {
+              purchaseOrderId: po.id,
+              productId,
+              orderedQuantity: item.qty,
+              receivedQuantity: item.qty,
+              unitId: item.unitId,
+              unitCostOriginalCurrency: item.costOriginal.toDecimalPlaces(2),
+              lineTotalOriginalCurrency: item.lineTotalOriginal.toDecimalPlaces(2),
+              unitCostBaseCurrency: item.costBase.toDecimalPlaces(2),
+              lineTotalBaseCurrency: item.lineTotalBase.toDecimalPlaces(2),
+            },
+          });
+        }
       }
 
-      for (const [productId, item] of productItemMap.entries()) {
-        await tx.purchaseItem.create({
-          data: {
-            purchaseOrderId: po.id,
-            productId,
-            orderedQuantity: item.qty,
-            receivedQuantity: item.qty,
-            unitId: item.unitId,
-            unitCostOriginalCurrency: item.costOriginal.toDecimalPlaces(2),
-            lineTotalOriginalCurrency: item.lineTotalOriginal.toDecimalPlaces(2),
-            unitCostBaseCurrency: item.costBase.toDecimalPlaces(2),
-            lineTotalBaseCurrency: item.lineTotalBase.toDecimalPlaces(2),
-          },
-        });
+      // ── Create Stock Items + PurchaseItems (item lines) ──────────────────
+      if (hasItems) {
+        for (const item of itemsData) {
+          // Upsert ProductStockItem by (productId + colorId + designId)
+          let stockItem = await tx.productStockItem.findFirst({
+            where: {
+              productId: item.productId,
+              colorId: item.colorId,
+              designId: item.designId,
+              ...(item.barcodeValue ? { barcodeValue: item.barcodeValue } : {}),
+            },
+          });
+
+          if (stockItem) {
+            // Increment quantity and update prices
+            const newQty = new Prisma.Decimal(stockItem.quantityOnHand.toString()).plus(item.qty);
+            stockItem = await tx.productStockItem.update({
+              where: { id: stockItem.id },
+              data: {
+                quantityOnHand: newQty,
+                purchasePricePerUnitBaseCurrency: item.priceBase,
+                salePricePerUnit: item.salePrice,
+                ...(item.location ? { location: item.location } : {}),
+              },
+            });
+          } else {
+            stockItem = await tx.productStockItem.create({
+              data: {
+                productId: item.productId,
+                colorId: item.colorId,
+                designId: item.designId,
+                barcodeValue: item.barcodeValue,
+                quantityOnHand: item.qty,
+                unitId: item.unitId,
+                purchasePricePerUnitBaseCurrency: item.priceBase,
+                salePricePerUnit: item.salePrice,
+                location: item.location,
+                description: item.description,
+                isActive: true,
+              },
+            });
+          }
+
+          // Create InventoryMovement for item line
+          const beforeQty = new Prisma.Decimal(stockItem.quantityOnHand.toString()).minus(item.qty);
+          await tx.inventoryMovement.create({
+            data: {
+              productId: item.productId,
+              productStockItemId: stockItem.id,
+              movementType: 'PURCHASE',
+              direction: 'IN',
+              quantity: item.qty,
+              unitId: item.unitId,
+              beforeQuantity: beforeQty.lt(0) ? new Prisma.Decimal(0) : beforeQty,
+              afterQuantity: stockItem.quantityOnHand,
+              referenceType: 'PURCHASE_ORDER',
+              referenceId: po.id,
+              remarks: `Purchase from PO ${poNumber}`,
+              userId,
+            },
+          });
+
+          // Create PurchaseItem per variant
+          const lineOriginal = item.qty.times(item.priceOriginal).toDecimalPlaces(2);
+          const lineBase = item.qty.times(item.priceBase).toDecimalPlaces(2);
+          await tx.purchaseItem.create({
+            data: {
+              purchaseOrderId: po.id,
+              productId: item.productId,
+              productStockItemId: stockItem.id,
+              orderedQuantity: item.qty,
+              receivedQuantity: item.qty,
+              unitId: item.unitId,
+              unitCostOriginalCurrency: item.priceOriginal.toDecimalPlaces(2),
+              lineTotalOriginalCurrency: lineOriginal,
+              unitCostBaseCurrency: item.priceBase.toDecimalPlaces(2),
+              lineTotalBaseCurrency: lineBase,
+            },
+          });
+        }
       }
 
-      // ── Supplier ledger + balance (always in base currency) ───────────────
+      // ── Supplier ledger + balance ──────────────────────────────────────────
       if (payableOriginal.gt(0)) {
         const payableBase = payableOriginal.times(exchangeRate).toDecimalPlaces(2);
         const supplierBalance = new Prisma.Decimal(supplier.currentBalance.toString());
@@ -345,7 +536,8 @@ export class PurchasesService {
             totalOriginalCurrency: totalOriginal.toString(),
             totalBaseCurrency: totalBase.toString(),
             paidAmount: paidAmountOriginal.toString(),
-            rollCount: dto.rolls.length,
+            rollCount: dto.rolls?.length ?? 0,
+            itemCount: dto.items?.length ?? 0,
           }),
         },
       });
@@ -389,7 +581,6 @@ export class PurchasesService {
       const exchangeRate = new Prisma.Decimal(po.exchangeRateToBaseCurrency.toString());
       const amountBase = paymentAmount.times(exchangeRate).toDecimalPlaces(2);
 
-      // Create payment record
       await tx.supplierPayment.create({
         data: {
           purchaseOrderId: purchaseId,
@@ -404,7 +595,6 @@ export class PurchasesService {
         },
       });
 
-      // Update PO paid/due amounts and status
       const newPaid = new Prisma.Decimal(po.paidAmountOriginalCurrency.toString()).plus(paymentAmount);
       const newDue = currentDue.minus(paymentAmount).toDecimalPlaces(2);
       let newStatus: InvoiceStatus;
@@ -420,7 +610,6 @@ export class PurchasesService {
         },
       });
 
-      // Supplier ledger entry: debit (payment reduces liability)
       const supplier = await tx.supplier.findUnique({ where: { id: po.supplierId } });
       if (!supplier) throw AppError.notFound('Supplier not found', 'SUPPLIER_NOT_FOUND');
       const prevBalance = new Prisma.Decimal(supplier.currentBalance.toString());

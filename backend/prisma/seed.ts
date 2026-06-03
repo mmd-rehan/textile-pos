@@ -252,6 +252,266 @@ async function main() {
   }
   console.log('✅ Seeded sales user (username: sales, password: Sales@123).');
 
+  // ==========================================
+  // 9. SEED SAMPLE CATEGORIES
+  // ==========================================
+  console.log('🗂️  Seeding categories...');
+  const categoryData = [
+    { name: 'Fabric',      description: 'Raw fabric rolls and cloth' },
+    { name: 'Ready-Made',  description: 'Finished garments and ready-made items' },
+    { name: 'Accessories', description: 'Buttons, zippers, trims, and notions' },
+    { name: 'Cut Pieces',  description: 'Pre-cut fabric pieces' },
+  ];
+  const categoryMap = new Map<string, string>();
+  for (const c of categoryData) {
+    let cat = await prisma.category.findFirst({ where: { name: c.name } });
+    if (cat) {
+      cat = await prisma.category.update({ where: { id: cat.id }, data: { description: c.description } });
+    } else {
+      cat = await prisma.category.create({ data: c });
+    }
+    categoryMap.set(cat.name, cat.id);
+  }
+  console.log(`✅ Seeded ${categoryMap.size} categories.`);
+
+  // ==========================================
+  // 10. SEED SAMPLE BRANDS
+  // ==========================================
+  console.log('🏷️  Seeding brands...');
+  const brandData = [
+    { name: 'AlKaram',   description: 'AlKaram Studio' },
+    { name: 'Gul Ahmed', description: 'Gul Ahmed Textile Mills' },
+    { name: 'Sapphire',  description: 'Sapphire Fibres Ltd.' },
+    { name: 'Unbranded', description: 'Generic / no brand' },
+  ];
+  const brandMap = new Map<string, string>();
+  for (const b of brandData) {
+    const brand = await prisma.brand.upsert({
+      where: { name: b.name },
+      update: { description: b.description },
+      create: b,
+    });
+    brandMap.set(brand.name, brand.id);
+  }
+  console.log(`✅ Seeded ${brandMap.size} brands.`);
+
+  // ==========================================
+  // 11. SEED SAMPLE COLORS
+  // ==========================================
+  console.log('🎨 Seeding colors...');
+  const colorData = [
+    { name: 'White',       colorCode: '#FFFFFF' },
+    { name: 'Black',       colorCode: '#000000' },
+    { name: 'Navy Blue',   colorCode: '#001F5B' },
+    { name: 'Sky Blue',    colorCode: '#87CEEB' },
+    { name: 'Red',         colorCode: '#FF0000' },
+    { name: 'Green',       colorCode: '#008000' },
+    { name: 'Brown',       colorCode: '#8B4513' },
+    { name: 'Grey',        colorCode: '#808080' },
+    { name: 'Cream',       colorCode: '#FFFDD0' },
+    { name: 'Maroon',      colorCode: '#800000' },
+  ];
+  const colorMap = new Map<string, string>();
+  for (const c of colorData) {
+    const color = await prisma.color.upsert({
+      where: { name: c.name },
+      update: { colorCode: c.colorCode, isActive: true },
+      create: { name: c.name, colorCode: c.colorCode, isActive: true },
+    });
+    colorMap.set(color.name, color.id);
+  }
+  console.log(`✅ Seeded ${colorMap.size} colors.`);
+
+  // ==========================================
+  // 12. SEED SAMPLE DESIGNS
+  // ==========================================
+  console.log('🖼️  Seeding designs...');
+  const designData = [
+    { name: 'Plain',       designCode: 'PLN' },
+    { name: 'Stripe',      designCode: 'STR' },
+    { name: 'Check',       designCode: 'CHK' },
+    { name: 'Floral',      designCode: 'FLR' },
+    { name: 'Geometric',   designCode: 'GEO' },
+    { name: 'Embroidered', designCode: 'EMB' },
+  ];
+  const designMap = new Map<string, string>();
+  for (const d of designData) {
+    const design = await prisma.design.upsert({
+      where: { name: d.name },
+      update: { designCode: d.designCode, isActive: true },
+      create: { name: d.name, designCode: d.designCode, isActive: true },
+    });
+    designMap.set(design.name, design.id);
+  }
+  console.log(`✅ Seeded ${designMap.size} designs.`);
+
+  // ==========================================
+  // 13. SEED SAMPLE SUPPLIER
+  // ==========================================
+  console.log('🏭 Seeding suppliers...');
+  const supplierData = [
+    { name: 'Karachi Fabric House',  contactName: 'Ahmed Raza',          phone: '+92-21-1234567',  email: 'sales@kfh.pk',   address: '12-B, SITE Area, Karachi'       },
+    { name: 'Dubai Textile Traders', contactName: 'Khalid Al-Mansoori',  phone: '+971-4-9876543',  email: 'info@dtt.ae',    address: 'Al Quoz Industrial Area, Dubai' },
+    { name: 'Global Fabric Co.',     contactName: 'John Smith',          phone: '+1-212-5551234',  email: 'john@gfc.com',   address: 'New York, USA'                  },
+  ];
+  const supplierMap = new Map<string, string>();
+  for (const s of supplierData) {
+    let supplier = await prisma.supplier.findFirst({ where: { name: s.name } });
+    if (supplier) {
+      supplier = await prisma.supplier.update({
+        where: { id: supplier.id },
+        data: { contactName: s.contactName, phone: s.phone, email: s.email, address: s.address },
+      });
+    } else {
+      supplier = await prisma.supplier.create({ data: s });
+    }
+    supplierMap.set(supplier.name, supplier.id);
+  }
+  console.log(`✅ Seeded ${supplierMap.size} suppliers.`);
+
+  // ==========================================
+  // 14. SEED SAMPLE CUSTOMERS
+  // ==========================================
+  console.log('👥 Seeding customers...');
+  const customerData = [
+    { name: 'Walk-in Customer', phone: null,              email: null,                      type: 'RETAIL' as const    },
+    { name: 'Sara Boutique',    phone: '+92-333-1234567', email: 'sara@boutique.pk',        type: 'RETAIL' as const    },
+    { name: 'City Garments',    phone: '+92-21-3456789',  email: 'orders@citygarments.pk',  type: 'WHOLESALE' as const },
+  ];
+  for (const c of customerData) {
+    let customer = await prisma.customer.findFirst({ where: { name: c.name } });
+    if (customer) {
+      await prisma.customer.update({ where: { id: customer.id }, data: { phone: c.phone, email: c.email, type: c.type } });
+    } else {
+      await prisma.customer.create({ data: { name: c.name, phone: c.phone, email: c.email, type: c.type } });
+    }
+  }
+  console.log(`✅ Seeded ${customerData.length} customers.`);
+
+  // ==========================================
+  // 15. SEED SAMPLE PRODUCTS
+  // ==========================================
+  console.log('📦 Seeding sample products...');
+
+  const yardUnitId = unitMap.get('yd')!;
+  const pieceUnitId = unitMap.get('pc')!;
+
+  const fabricCatId = categoryMap.get('Fabric')!;
+  const accessoryCatId = categoryMap.get('Accessories')!;
+  const cutCatId = categoryMap.get('Cut Pieces')!;
+  const readyMadeCatId = categoryMap.get('Ready-Made')!;
+  const alkaramBrandId = brandMap.get('AlKaram')!;
+  const gulAhmedBrandId = brandMap.get('Gul Ahmed')!;
+  const sapphireBrandId = brandMap.get('Sapphire')!;
+  const unbrandedId = brandMap.get('Unbranded')!;
+
+  const productData = [
+    // FABRIC_ROLL products
+    {
+      productCode: 'FAB-001',
+      name: 'Lawn Summer Print',
+      productType: 'FABRIC_ROLL' as const,
+      retailPrice: '450.00',
+      wholesalePrice: '380.00',
+      status: 'ACTIVE' as const,
+      categoryId: fabricCatId,
+      brandId: alkaramBrandId,
+      defaultUnitId: yardUnitId,
+      description: 'Soft lawn fabric with summer floral prints',
+    },
+    {
+      productCode: 'FAB-002',
+      name: 'Cotton Voile Plain',
+      productType: 'FABRIC_ROLL' as const,
+      retailPrice: '280.00',
+      wholesalePrice: '220.00',
+      status: 'ACTIVE' as const,
+      categoryId: fabricCatId,
+      brandId: gulAhmedBrandId,
+      defaultUnitId: yardUnitId,
+      description: 'Lightweight plain cotton voile',
+    },
+    {
+      productCode: 'FAB-003',
+      name: 'Khaddar Winter Check',
+      productType: 'FABRIC_ROLL' as const,
+      retailPrice: '520.00',
+      wholesalePrice: '440.00',
+      status: 'ACTIVE' as const,
+      categoryId: fabricCatId,
+      brandId: sapphireBrandId,
+      defaultUnitId: yardUnitId,
+      description: 'Heavy winter khaddar with check pattern',
+    },
+    // FIXED_PRODUCT products
+    {
+      productCode: 'ACC-001',
+      name: 'Metal Buttons (Pack of 12)',
+      productType: 'FIXED_PRODUCT' as const,
+      retailPrice: '120.00',
+      wholesalePrice: '90.00',
+      status: 'ACTIVE' as const,
+      categoryId: accessoryCatId,
+      brandId: unbrandedId,
+      defaultUnitId: pieceUnitId,
+      description: 'Decorative metal shirt buttons, pack of 12',
+    },
+    {
+      productCode: 'ACC-002',
+      name: 'YKK Zipper 7 inch',
+      productType: 'FIXED_PRODUCT' as const,
+      retailPrice: '45.00',
+      wholesalePrice: '30.00',
+      status: 'ACTIVE' as const,
+      categoryId: accessoryCatId,
+      brandId: unbrandedId,
+      defaultUnitId: pieceUnitId,
+      description: 'YKK brand 7-inch invisible zipper',
+    },
+    {
+      productCode: 'RDY-001',
+      name: 'Shalwar Kameez (Stitched)',
+      productType: 'FIXED_PRODUCT' as const,
+      retailPrice: '1800.00',
+      wholesalePrice: '1500.00',
+      status: 'ACTIVE' as const,
+      categoryId: readyMadeCatId,
+      brandId: alkaramBrandId,
+      defaultUnitId: pieceUnitId,
+      description: 'Pre-stitched shalwar kameez set',
+    },
+    // CUT_PIECE products
+    {
+      productCode: 'CUT-001',
+      name: 'Lawn 3-Piece Cut',
+      productType: 'CUT_PIECE' as const,
+      retailPrice: '1200.00',
+      wholesalePrice: '980.00',
+      status: 'ACTIVE' as const,
+      categoryId: cutCatId,
+      brandId: gulAhmedBrandId,
+      defaultUnitId: pieceUnitId,
+      description: '3-piece lawn suit cut from roll',
+    },
+  ];
+
+  const productMap = new Map<string, string>();
+  for (const p of productData) {
+    const product = await prisma.product.upsert({
+      where: { productCode: p.productCode },
+      update: {
+        name: p.name,
+        retailPrice: p.retailPrice,
+        wholesalePrice: p.wholesalePrice,
+        status: p.status,
+        description: p.description,
+      },
+      create: p,
+    });
+    productMap.set(product.productCode, product.id);
+  }
+  console.log(`✅ Seeded ${productMap.size} products (3 FABRIC_ROLL, 3 FIXED_PRODUCT, 1 CUT_PIECE).`);
+
   console.log('🎉 Database seeding completed successfully!');
 }
 

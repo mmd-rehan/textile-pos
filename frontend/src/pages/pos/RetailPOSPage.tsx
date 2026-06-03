@@ -4,8 +4,10 @@ import {
   Barcode,
   CheckCircle,
   Minus,
+  Package,
   Plus,
   Printer,
+  Search,
   ShoppingCart,
   Trash2,
   User,
@@ -18,7 +20,14 @@ import { salesApi } from '../../api/sales';
 import Modal from '../../components/ui/Modal';
 import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
 import { useAppStore } from '../../store/useAppStore';
-import type { BarcodeLookupResult, Customer, ReceiptData, SaleInvoice } from '../../types';
+import type {
+  BarcodeLookupResult,
+  Customer,
+  POSSearchResult,
+  ReceiptData,
+  RollSummaryItem,
+  StockItemSummary,
+} from '../../types';
 
 const M_TO_YD = 1.093613;
 const YD_TO_M = 0.9144;
@@ -31,8 +40,11 @@ const PAYMENT_METHODS = [
   { value: 'MOBILE_WALLET', label: 'Mobile Wallet' },
 ];
 
-interface CartLine {
+// ── Cart line types ──────────────────────────────────────────────────────────
+
+interface RollCartLine {
   id: string;
+  lineType: 'ROLL';
   rollId: string;
   productId: string;
   rollNumber: string;
@@ -48,6 +60,26 @@ interface CartLine {
   discountAmount: string;
 }
 
+interface QuantityCartLine {
+  id: string;
+  lineType: 'QUANTITY';
+  productId: string;
+  productStockItemId: string;
+  productName: string;
+  productCode: string;
+  colorName: string | null;
+  designName: string | null;
+  quantityOnHand: string;
+  unitAbbreviation: string;
+  quantity: string;
+  unitPrice: string;
+  discountAmount: string;
+}
+
+type CartLine = RollCartLine | QuantityCartLine;
+
+// ── Other interfaces ─────────────────────────────────────────────────────────
+
 interface PaymentEntry {
   method: string;
   amount: string;
@@ -56,17 +88,20 @@ interface PaymentEntry {
 interface RollPickerState {
   productName: string;
   productId: string;
-  rolls: Array<{
-    id: string;
-    rollNumber: string;
-    remainingLengthYard: string;
-    salePricePerYard: string | null;
-    status: string;
-    location: string | null;
-  }>;
+  productCode: string;
+  rolls: RollSummaryItem[];
 }
 
-function getLineValues(line: CartLine) {
+interface StockPickerState {
+  productName: string;
+  productId: string;
+  productCode: string;
+  items: StockItemSummary[];
+}
+
+// ── Line value helpers ───────────────────────────────────────────────────────
+
+function getRollLineValues(line: RollCartLine) {
   const factor = line.unit === 'METER' ? M_TO_YD : 1;
   const billed = parseFloat(line.billedQuantity) || 0;
   const actualCut = line.actualCutQuantity !== '' ? parseFloat(line.actualCutQuantity) || 0 : billed;
@@ -82,20 +117,39 @@ function getLineValues(line: CartLine) {
   return { billedYard, actualCutYard, remainingAfterCut, wastageYard, grossSubTotal, subTotal };
 }
 
+function getQtyLineSubtotal(line: QuantityCartLine) {
+  const qty = parseFloat(line.quantity) || 0;
+  const price = parseFloat(line.unitPrice) || 0;
+  const discount = parseFloat(line.discountAmount) || 0;
+  return Math.max(0, qty * price - discount);
+}
+
 function getInvoiceTotals(lines: CartLine[], payments: PaymentEntry[]) {
-  const netAmount = lines.reduce((s, l) => s + getLineValues(l).subTotal, 0);
+  const netAmount = lines.reduce((s, l) => {
+    if (l.lineType === 'ROLL') return s + getRollLineValues(l).subTotal;
+    return s + getQtyLineSubtotal(l);
+  }, 0);
   const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
   const due = Math.max(0, netAmount - totalPaid);
   return { netAmount, totalPaid, due };
 }
 
+// ── Main component ───────────────────────────────────────────────────────────
+
 export default function RetailPOSPage() {
   const { showNotification } = useAppStore();
   const barcodeRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [barcodeValue, setBarcodeValue] = useState('');
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+
+  const [productSearch, setProductSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<POSSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
 
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
   const [payments, setPayments] = useState<PaymentEntry[]>([{ method: 'CASH', amount: '' }]);
@@ -106,11 +160,11 @@ export default function RetailPOSPage() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
   const [rollPicker, setRollPicker] = useState<RollPickerState | null>(null);
+  const [stockPicker, setStockPicker] = useState<StockPickerState | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitErrors, setSubmitErrors] = useState<string[]>([]);
 
-  const [completedSale, setCompletedSale] = useState<SaleInvoice | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
 
@@ -131,6 +185,83 @@ export default function RetailPOSPage() {
     barcodeRef.current?.focus();
   }, []);
 
+  // Product search (debounced)
+  function handleProductSearchChange(value: string) {
+    setProductSearch(value);
+    setShowSearchDropdown(true);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (!value.trim()) {
+      setSearchResults([]);
+      setShowSearchDropdown(false);
+      return;
+    }
+    searchDebounceRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await inventoryApi.posSearch(value.trim(), 8);
+        setSearchResults(res.data);
+        setShowSearchDropdown(true);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+  }
+
+  function handleSearchResultSelect(result: POSSearchResult) {
+    setProductSearch('');
+    setSearchResults([]);
+    setShowSearchDropdown(false);
+
+    if (result.productType === 'FABRIC_ROLL') {
+      const rolls = result.availableRolls;
+      if (rolls.length === 0) {
+        setScanError(`No rolls in stock for "${result.name}"`);
+        return;
+      }
+      if (rolls.length === 1) {
+        addRollToCart({
+          id: rolls[0].id,
+          rollNumber: rolls[0].rollNumber,
+          productId: result.id,
+          productName: result.name,
+          productCode: result.productCode,
+          colorName: result.color?.name ?? null,
+          designName: result.design?.name ?? null,
+          remainingLengthYard: rolls[0].remainingLengthYard,
+          salePricePerYard: rolls[0].salePricePerYard ?? null,
+        });
+      } else {
+        setRollPicker({
+          productName: result.name,
+          productId: result.id,
+          productCode: result.productCode,
+          rolls: rolls,
+        });
+      }
+    } else {
+      // FIXED_PRODUCT or CUT_PIECE
+      const items = result.stockItems;
+      if (items.length === 0) {
+        setScanError(`No stock available for "${result.name}"`);
+        return;
+      }
+      if (items.length === 1) {
+        addStockItemToCart(result, items[0]);
+      } else {
+        setStockPicker({
+          productName: result.name,
+          productId: result.id,
+          productCode: result.productCode,
+          items: items,
+        });
+      }
+    }
+    refocusBarcode();
+  }
+
+  // Barcode scan
   const handleBarcodeSubmit = async () => {
     const val = barcodeValue.trim();
     if (!val) return;
@@ -158,36 +289,76 @@ export default function RetailPOSPage() {
           remainingLengthYard: result.roll.remainingLengthYard,
           salePricePerYard: result.roll.salePricePerYard ?? null,
         });
+      } else if (result.type === 'STOCK_ITEM' && result.stockItem) {
+        const si = result.stockItem;
+        if (parseFloat(si.quantityOnHand) <= 0) {
+          setScanError(`"${si.product.name}" is out of stock`);
+          setBarcodeValue('');
+          return;
+        }
+        addStockItemToCart(
+          {
+            id: si.productId,
+            name: si.product.name,
+            productCode: si.product.productCode,
+            productType: si.product.productType,
+            color: si.color ?? null,
+            design: si.design ?? null,
+          },
+          {
+            id: si.id,
+            quantityOnHand: si.quantityOnHand,
+            barcodeValue: si.barcodeValue,
+            salePricePerUnit: si.salePricePerUnit,
+            location: si.location,
+            color: si.color ?? null,
+            design: si.design ?? null,
+            unit: si.unit,
+          },
+        );
       } else if (result.type === 'PRODUCT' && result.product) {
         const p = result.product;
-        if (p.availableRolls.length === 0) {
-          setScanError(`No rolls in stock for ${p.name}`);
-        } else if (p.availableRolls.length === 1) {
-          const roll = p.availableRolls[0];
-          addRollToCart({
-            id: roll.id,
-            rollNumber: roll.rollNumber,
-            productId: p.id,
-            productName: p.name,
-            productCode: p.productCode,
-            colorName: null,
-            designName: null,
-            remainingLengthYard: roll.remainingLengthYard,
-            salePricePerYard: roll.salePricePerYard ?? null,
-          });
+        if (p.productType === 'FABRIC_ROLL') {
+          const rolls = p.availableRolls ?? [];
+          if (rolls.length === 0) {
+            setScanError(`No rolls in stock for "${p.name}"`);
+          } else if (rolls.length === 1) {
+            addRollToCart({
+              id: rolls[0].id,
+              rollNumber: rolls[0].rollNumber,
+              productId: p.id,
+              productName: p.name,
+              productCode: p.productCode,
+              colorName: p.color?.name ?? null,
+              designName: p.design?.name ?? null,
+              remainingLengthYard: rolls[0].remainingLengthYard,
+              salePricePerYard: rolls[0].salePricePerYard ?? null,
+            });
+          } else {
+            setRollPicker({
+              productName: p.name,
+              productId: p.id,
+              productCode: p.productCode,
+              rolls: rolls,
+            });
+          }
         } else {
-          setRollPicker({
-            productName: p.name,
-            productId: p.id,
-            rolls: p.availableRolls.map((r) => ({
-              id: r.id,
-              rollNumber: r.rollNumber,
-              remainingLengthYard: r.remainingLengthYard,
-              salePricePerYard: r.salePricePerYard ?? null,
-              status: r.status,
-              location: r.location ?? null,
-            })),
-          });
+          const items = p.stockItems ?? [];
+          if (items.length === 0) {
+            setScanError(`No stock available for "${p.name}"`);
+          } else if (items.length === 1) {
+            addStockItemToCart(
+              { id: p.id, name: p.name, productCode: p.productCode, productType: p.productType, color: p.color ?? null, design: p.design ?? null },
+              items[0],
+            );
+          } else {
+            setStockPicker({
+              productName: p.name,
+              productId: p.id,
+              productCode: p.productCode,
+              items: items,
+            });
+          }
         }
       }
       setBarcodeValue('');
@@ -212,7 +383,7 @@ export default function RetailPOSPage() {
     remainingLengthYard: string;
     salePricePerYard: string | null;
   }) {
-    const existing = cartLines.find((l) => l.rollId === roll.id);
+    const existing = cartLines.find((l) => l.lineType === 'ROLL' && l.rollId === roll.id);
     if (existing) {
       setScanError(`Roll ${roll.rollNumber} is already in the cart.`);
       return;
@@ -221,6 +392,7 @@ export default function RetailPOSPage() {
       ...prev,
       {
         id: crypto.randomUUID(),
+        lineType: 'ROLL',
         rollId: roll.id,
         productId: roll.productId,
         rollNumber: roll.rollNumber,
@@ -234,22 +406,60 @@ export default function RetailPOSPage() {
         unit: 'YARD',
         unitPrice: roll.salePricePerYard ?? '0',
         discountAmount: '0',
-      },
+      } satisfies RollCartLine,
     ]);
     setScanError(null);
   }
 
-  function updateLine(id: string, updates: Partial<CartLine>) {
-    setCartLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)));
+  function addStockItemToCart(
+    product: { id: string; name: string; productCode: string; productType: string; color?: { name: string } | null; design?: { name: string } | null },
+    item: StockItemSummary,
+  ) {
+    const existing = cartLines.find((l) => l.lineType === 'QUANTITY' && l.productStockItemId === item.id);
+    if (existing) {
+      // Increment quantity instead of duplicate
+      setCartLines((prev) =>
+        prev.map((l) => {
+          if (l.lineType === 'QUANTITY' && l.productStockItemId === item.id) {
+            const newQty = (parseFloat(l.quantity) || 0) + 1;
+            return { ...l, quantity: String(newQty) };
+          }
+          return l;
+        }),
+      );
+      return;
+    }
+    setCartLines((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        lineType: 'QUANTITY',
+        productId: product.id,
+        productStockItemId: item.id,
+        productName: product.name,
+        productCode: product.productCode,
+        colorName: item.color?.name ?? product.color?.name ?? null,
+        designName: item.design?.name ?? product.design?.name ?? null,
+        quantityOnHand: item.quantityOnHand,
+        unitAbbreviation: item.unit?.abbreviation ?? 'pc',
+        quantity: '1',
+        unitPrice: item.salePricePerUnit ?? '0',
+        discountAmount: '0',
+      } satisfies QuantityCartLine,
+    ]);
+    setScanError(null);
+  }
+
+  function updateLine(id: string, updates: Partial<RollCartLine> | Partial<QuantityCartLine>) {
+    setCartLines((prev) => prev.map((l) => (l.id === id ? ({ ...l, ...updates } as CartLine) : l)));
   }
 
   function removeLine(id: string) {
     setCartLines((prev) => prev.filter((l) => l.id !== id));
   }
 
-  function handleUnitChange(lineId: string, line: CartLine, newUnit: 'YARD' | 'METER') {
+  function handleUnitChange(lineId: string, line: RollCartLine, newUnit: 'YARD' | 'METER') {
     if (newUnit === line.unit) return;
-    // Convert unitPrice when switching unit
     const price = parseFloat(line.unitPrice) || 0;
     const newPrice =
       newUnit === 'METER' ? (price * YD_TO_M).toFixed(2) : (price / YD_TO_M).toFixed(2);
@@ -283,7 +493,10 @@ export default function RetailPOSPage() {
 
   const canSubmit =
     cartLines.length > 0 &&
-    cartLines.every((l) => parseFloat(l.billedQuantity) > 0 && parseFloat(l.unitPrice) >= 0) &&
+    cartLines.every((l) => {
+      if (l.lineType === 'ROLL') return parseFloat(l.billedQuantity) > 0 && parseFloat(l.unitPrice) >= 0;
+      return parseFloat(l.quantity) > 0 && parseFloat(l.unitPrice) >= 0;
+    }) &&
     !isSubmitting;
 
   async function handleCompleteSale() {
@@ -293,18 +506,32 @@ export default function RetailPOSPage() {
 
     const idempotencyKey = crypto.randomUUID();
 
+    const rollLines = cartLines.filter((l): l is RollCartLine => l.lineType === 'ROLL');
+    const qtyLines = cartLines.filter((l): l is QuantityCartLine => l.lineType === 'QUANTITY');
+
     try {
       const dto = {
         customerId: customerId ?? undefined,
-        lines: cartLines.map((l) => ({
-          productId: l.productId,
-          rollId: l.rollId,
-          billedQuantity: parseFloat(l.billedQuantity),
-          actualCutQuantity: l.actualCutQuantity !== '' ? parseFloat(l.actualCutQuantity) : undefined,
-          unit: l.unit,
-          unitPrice: parseFloat(l.unitPrice),
-          discountAmount: parseFloat(l.discountAmount) || 0,
-        })),
+        lines: rollLines.length > 0
+          ? rollLines.map((l) => ({
+              productId: l.productId,
+              rollId: l.rollId,
+              billedQuantity: parseFloat(l.billedQuantity),
+              actualCutQuantity: l.actualCutQuantity !== '' ? parseFloat(l.actualCutQuantity) : undefined,
+              unit: l.unit,
+              unitPrice: parseFloat(l.unitPrice),
+              discountAmount: parseFloat(l.discountAmount) || 0,
+            }))
+          : undefined,
+        quantityLines: qtyLines.length > 0
+          ? qtyLines.map((l) => ({
+              productId: l.productId,
+              productStockItemId: l.productStockItemId,
+              quantity: parseFloat(l.quantity),
+              unitPrice: parseFloat(l.unitPrice),
+              discountAmount: parseFloat(l.discountAmount) || 0,
+            }))
+          : undefined,
         payments: payments
           .filter((p) => parseFloat(p.amount) > 0)
           .map((p) => ({ method: p.method, amount: parseFloat(p.amount) })),
@@ -313,9 +540,7 @@ export default function RetailPOSPage() {
 
       const res = await salesApi.createRetailSale(dto, idempotencyKey);
       const invoice = res.data;
-      setCompletedSale(invoice);
 
-      // Fetch receipt data (has company info)
       try {
         const receiptRes = await salesApi.getReceipt(invoice.id);
         setReceiptData(receiptRes.data);
@@ -324,8 +549,6 @@ export default function RetailPOSPage() {
       }
 
       setShowReceipt(true);
-
-      // Reset cart for next sale
       setCartLines([]);
       setPayments([{ method: 'CASH', amount: '' }]);
       setNotes('');
@@ -350,19 +573,16 @@ export default function RetailPOSPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Retail POS</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Scan a roll barcode to add to cart</p>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-          <Barcode className="w-4 h-4" />
-          <span>Barcode input active</span>
+          <p className="text-sm text-gray-500 mt-0.5">Scan a barcode or search by product name / code</p>
         </div>
       </div>
 
       <div className="flex gap-4 flex-1 min-h-0">
         {/* Left: Cart */}
         <div className="flex-1 flex flex-col gap-4 min-w-0">
-          {/* Barcode scanner */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+          {/* Input panel: barcode + product search */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+            {/* Barcode row */}
             <div className="flex gap-3">
               <div className="relative flex-1">
                 <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -390,8 +610,76 @@ export default function RetailPOSPage() {
                 {scanLoading ? 'Scanning…' : 'Scan'}
               </button>
             </div>
+
+            {/* Product search row */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                ref={searchRef}
+                value={productSearch}
+                onChange={(e) => handleProductSearchChange(e.target.value)}
+                onFocus={() => productSearch.trim() && setShowSearchDropdown(true)}
+                onBlur={() => setTimeout(() => setShowSearchDropdown(false), 200)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Search product by name or code…"
+                className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              {searchLoading && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+              )}
+              {showSearchDropdown && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-72 overflow-y-auto">
+                  {searchResults.map((result) => {
+                    const isRoll = result.productType === 'FABRIC_ROLL';
+                    const stockCount = isRoll ? result.availableRolls.length : result.stockItems.length;
+                    const totalQty = isRoll
+                      ? result.availableRolls.reduce((s, r) => s + parseFloat(r.remainingLengthYard), 0)
+                      : result.stockItems.reduce((s, i) => s + parseFloat(i.quantityOnHand), 0);
+                    return (
+                      <button
+                        key={result.id}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSearchResultSelect(result);
+                        }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-100 last:border-0 flex items-start justify-between gap-3"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${isRoll ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {isRoll ? 'Roll' : result.productType === 'CUT_PIECE' ? 'Cut' : 'Fixed'}
+                            </span>
+                            <p className="text-sm font-medium text-gray-900 truncate">{result.name}</p>
+                          </div>
+                          <p className="text-xs text-gray-400 font-mono mt-0.5">{result.productCode}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {stockCount > 0 ? (
+                            <>
+                              <p className="text-xs font-medium text-green-700">
+                                {isRoll ? `${totalQty.toFixed(1)} yd` : `${totalQty.toFixed(0)} pcs`}
+                              </p>
+                              <p className="text-xs text-gray-400">{stockCount} {isRoll ? 'roll(s)' : 'variant(s)'}</p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-red-500">Out of stock</p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {showSearchDropdown && !searchLoading && productSearch.trim() && searchResults.length === 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 px-4 py-3 text-sm text-gray-400">
+                  No products found for "{productSearch}"
+                </div>
+              )}
+            </div>
+
             {scanError && (
-              <div className="mt-2 flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 {scanError}
                 <button onClick={() => setScanError(null)} className="ml-auto">
@@ -406,15 +694,15 @@ export default function RetailPOSPage() {
             {cartLines.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center text-gray-400">
                 <ShoppingCart className="w-10 h-10 mb-3 opacity-30" />
-                <p className="text-sm">Cart is empty. Scan a barcode to add items.</p>
+                <p className="text-sm">Cart is empty. Scan a barcode or search to add items.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
                     <tr>
-                      <th className="px-4 py-3 text-left">Roll / Product</th>
-                      <th className="px-4 py-3 text-left">Billed Qty</th>
+                      <th className="px-4 py-3 text-left">Item</th>
+                      <th className="px-4 py-3 text-left">Qty</th>
                       <th className="px-4 py-3 text-left">Actual Cut</th>
                       <th className="px-3 py-3 text-left">Unit</th>
                       <th className="px-4 py-3 text-right">Unit Price</th>
@@ -425,79 +713,163 @@ export default function RetailPOSPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {cartLines.map((line) => {
-                      const v = getLineValues(line);
-                      const hasWastage = v.wastageYard > 0.001;
-                      const insufficientLength = v.remainingAfterCut < -0.001;
+                      if (line.lineType === 'ROLL') {
+                        const v = getRollLineValues(line);
+                        const hasWastage = v.wastageYard > 0.001;
+                        const insufficientLength = v.remainingAfterCut < -0.001;
+                        return (
+                          <tr key={line.id} className={insufficientLength ? 'bg-red-50' : 'bg-blue-50/30'}>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide bg-blue-100 text-blue-700">Roll</span>
+                                <p className="font-mono text-xs font-medium text-gray-900">{line.rollNumber}</p>
+                              </div>
+                              <p className="text-gray-500 text-xs truncate max-w-[160px]">{line.productName}</p>
+                              {line.colorName && (
+                                <p className="text-gray-400 text-xs">{line.colorName}{line.designName ? ` · ${line.designName}` : ''}</p>
+                              )}
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                Remaining: <span className={`font-mono ${insufficientLength ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                  {parseFloat(line.remainingLengthYard).toFixed(2)} yd
+                                </span>
+                                {' '}→ <span className={`font-mono ${insufficientLength ? 'text-red-600 font-bold' : v.remainingAfterCut < 0.5 ? 'text-amber-600' : 'text-green-600'}`}>
+                                  {Math.max(0, v.remainingAfterCut).toFixed(2)} yd
+                                </span>
+                              </p>
+                              {hasWastage && (
+                                <p className="text-xs text-amber-600 mt-0.5">Wastage: {v.wastageYard.toFixed(4)} yd</p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number" min="0" step="0.01"
+                                value={line.billedQuantity}
+                                onChange={(e) => updateLine(line.id, { billedQuantity: e.target.value })}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                placeholder="0.00"
+                              />
+                              {line.unit === 'METER' && parseFloat(line.billedQuantity) > 0 && (
+                                <p className="text-xs text-gray-400 font-mono mt-0.5 text-right">
+                                  ≈ {(parseFloat(line.billedQuantity) * M_TO_YD).toFixed(2)} yd
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number" min="0" step="0.01"
+                                value={line.actualCutQuantity}
+                                onChange={(e) => updateLine(line.id, { actualCutQuantity: e.target.value })}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                placeholder={line.billedQuantity || '= billed'}
+                              />
+                              {insufficientLength && (
+                                <p className="text-xs text-red-600 font-medium mt-0.5">Exceeds roll</p>
+                              )}
+                            </td>
+                            <td className="px-3 py-3">
+                              <select
+                                value={line.unit}
+                                onChange={(e) => handleUnitChange(line.id, line, e.target.value as 'YARD' | 'METER')}
+                                onClick={(e) => e.stopPropagation()}
+                                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              >
+                                <option value="YARD">yd</option>
+                                <option value="METER">m</option>
+                              </select>
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number" min="0" step="0.01"
+                                value={line.unitPrice}
+                                onChange={(e) => updateLine(line.id, { unitPrice: e.target.value })}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                placeholder="0.00"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number" min="0" step="0.01"
+                                value={line.discountAmount}
+                                onChange={(e) => updateLine(line.id, { discountAmount: e.target.value })}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                placeholder="0.00"
+                              />
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-medium text-gray-900 whitespace-nowrap">
+                              {formatAmount(v.subTotal, GLOBAL_SALE_CURRENCY)}
+                            </td>
+                            <td className="px-3 py-3">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); removeLine(line.id); }}
+                                className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      // QUANTITY line
+                      const subtotal = getQtyLineSubtotal(line);
+                      const qtyNum = parseFloat(line.quantity) || 0;
+                      const onHand = parseFloat(line.quantityOnHand) || 0;
+                      const overStock = qtyNum > onHand;
                       return (
-                        <tr key={line.id} className={insufficientLength ? 'bg-red-50' : ''}>
+                        <tr key={line.id} className={overStock ? 'bg-red-50' : 'bg-amber-50/30'}>
                           <td className="px-4 py-3">
-                            <p className="font-medium text-gray-900 font-mono text-xs">{line.rollNumber}</p>
-                            <p className="text-gray-500 text-xs truncate max-w-[160px]">{line.productName}</p>
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide bg-amber-100 text-amber-700">
+                                <Package className="w-3 h-3 inline mr-0.5" />Fixed
+                              </span>
+                            </div>
+                            <p className="text-gray-900 text-xs font-medium truncate max-w-[160px]">{line.productName}</p>
                             {line.colorName && (
                               <p className="text-gray-400 text-xs">{line.colorName}{line.designName ? ` · ${line.designName}` : ''}</p>
                             )}
                             <p className="text-xs text-gray-400 mt-0.5">
-                              Remaining: <span className={`font-mono ${insufficientLength ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
-                                {parseFloat(line.remainingLengthYard).toFixed(2)} yd
-                              </span>
-                              {' '}→ <span className={`font-mono ${insufficientLength ? 'text-red-600 font-bold' : v.remainingAfterCut < 0.5 ? 'text-amber-600' : 'text-green-600'}`}>
-                                {Math.max(0, v.remainingAfterCut).toFixed(2)} yd
+                              On hand: <span className={`font-mono font-medium ${overStock ? 'text-red-600' : 'text-green-600'}`}>
+                                {onHand.toFixed(0)} {line.unitAbbreviation}
                               </span>
                             </p>
-                            {hasWastage && (
-                              <p className="text-xs text-amber-600 mt-0.5">
-                                Wastage: {v.wastageYard.toFixed(4)} yd
-                              </p>
-                            )}
                           </td>
                           <td className="px-4 py-3">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={line.billedQuantity}
-                              onChange={(e) => updateLine(line.id, { billedQuantity: e.target.value })}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
-                              placeholder="0.00"
-                            />
-                            {line.unit === 'METER' && parseFloat(line.billedQuantity) > 0 && (
-                              <p className="text-xs text-gray-400 font-mono mt-0.5 text-right">
-                                ≈ {(parseFloat(line.billedQuantity) * M_TO_YD).toFixed(2)} yd
-                              </p>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); updateLine(line.id, { quantity: String(Math.max(1, qtyNum - 1)) }); }}
+                                className="p-1 rounded border border-gray-300 hover:bg-gray-100"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <input
+                                type="number" min="1" step="1"
+                                value={line.quantity}
+                                onChange={(e) => updateLine(line.id, { quantity: e.target.value })}
+                                onClick={(e) => e.stopPropagation()}
+                                className={`w-16 border rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500 ${overStock ? 'border-red-400' : 'border-gray-300'}`}
+                              />
+                              <button
+                                onClick={(e) => { e.stopPropagation(); updateLine(line.id, { quantity: String(qtyNum + 1) }); }}
+                                className="p-1 rounded border border-gray-300 hover:bg-gray-100"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                            {overStock && (
+                              <p className="text-xs text-red-600 font-medium mt-0.5">Exceeds stock</p>
                             )}
                           </td>
-                          <td className="px-4 py-3">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={line.actualCutQuantity}
-                              onChange={(e) => updateLine(line.id, { actualCutQuantity: e.target.value })}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
-                              placeholder={line.billedQuantity || '= billed'}
-                            />
-                            {insufficientLength && (
-                              <p className="text-xs text-red-600 font-medium mt-0.5">Exceeds roll</p>
-                            )}
-                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-400 italic">—</td>
                           <td className="px-3 py-3">
-                            <select
-                              value={line.unit}
-                              onChange={(e) => handleUnitChange(line.id, line, e.target.value as 'YARD' | 'METER')}
-                              onClick={(e) => e.stopPropagation()}
-                              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            >
-                              <option value="YARD">yd</option>
-                              <option value="METER">m</option>
-                            </select>
+                            <span className="text-sm text-gray-600">{line.unitAbbreviation}</span>
                           </td>
                           <td className="px-4 py-3">
                             <input
-                              type="number"
-                              min="0"
-                              step="0.01"
+                              type="number" min="0" step="0.01"
                               value={line.unitPrice}
                               onChange={(e) => updateLine(line.id, { unitPrice: e.target.value })}
                               onClick={(e) => e.stopPropagation()}
@@ -507,9 +879,7 @@ export default function RetailPOSPage() {
                           </td>
                           <td className="px-4 py-3">
                             <input
-                              type="number"
-                              min="0"
-                              step="0.01"
+                              type="number" min="0" step="0.01"
                               value={line.discountAmount}
                               onChange={(e) => updateLine(line.id, { discountAmount: e.target.value })}
                               onClick={(e) => e.stopPropagation()}
@@ -518,7 +888,7 @@ export default function RetailPOSPage() {
                             />
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-medium text-gray-900 whitespace-nowrap">
-                            {formatAmount(v.subTotal, GLOBAL_SALE_CURRENCY)}
+                            {formatAmount(subtotal, GLOBAL_SALE_CURRENCY)}
                           </td>
                           <td className="px-3 py-3">
                             <button
@@ -538,7 +908,7 @@ export default function RetailPOSPage() {
           </div>
         </div>
 
-        {/* Right: Order summary + Payment */}
+        {/* Right: Customer + Payment + Submit */}
         <div className="w-80 flex flex-col gap-4 shrink-0">
           {/* Customer */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
@@ -600,9 +970,7 @@ export default function RetailPOSPage() {
           {/* Payment panel */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                Payments
-              </label>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Payments</label>
               <button
                 onClick={(e) => { e.stopPropagation(); addPayment(); }}
                 className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
@@ -625,9 +993,7 @@ export default function RetailPOSPage() {
                   ))}
                 </select>
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="number" min="0" step="0.01"
                   value={payment.amount}
                   onChange={(e) => updatePayment(idx, { amount: e.target.value })}
                   onClick={(e) => e.stopPropagation()}
@@ -645,7 +1011,6 @@ export default function RetailPOSPage() {
               </div>
             ))}
 
-            {/* Totals */}
             <div className="border-t border-gray-100 pt-3 space-y-1.5">
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Total</span>
@@ -657,9 +1022,7 @@ export default function RetailPOSPage() {
               </div>
               <div className={`flex justify-between text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 <span>{due > 0 ? 'Due' : 'Change'}</span>
-                <span className="font-mono">
-                  {formatAmount(Math.abs(totalPaid - netAmount), GLOBAL_SALE_CURRENCY)}
-                </span>
+                <span className="font-mono">{formatAmount(Math.abs(totalPaid - netAmount), GLOBAL_SALE_CURRENCY)}</span>
               </div>
               {due > 0 && (
                 <button
@@ -687,7 +1050,6 @@ export default function RetailPOSPage() {
             />
           </div>
 
-          {/* Submit errors */}
           {submitErrors.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-1">
               {submitErrors.map((e, i) => (
@@ -696,7 +1058,6 @@ export default function RetailPOSPage() {
             </div>
           )}
 
-          {/* Complete sale button */}
           <button
             onClick={(e) => { e.stopPropagation(); handleCompleteSale(); }}
             disabled={!canSubmit}
@@ -735,11 +1096,11 @@ export default function RetailPOSPage() {
                     rollNumber: roll.rollNumber,
                     productId: rollPicker.productId,
                     productName: rollPicker.productName,
-                    productCode: '',
+                    productCode: rollPicker.productCode,
                     colorName: null,
                     designName: null,
                     remainingLengthYard: roll.remainingLengthYard,
-                    salePricePerYard: roll.salePricePerYard,
+                    salePricePerYard: roll.salePricePerYard ?? null,
                   });
                   setRollPicker(null);
                   refocusBarcode();
@@ -753,9 +1114,49 @@ export default function RetailPOSPage() {
                 <div className="text-right">
                   <p className="font-mono text-gray-700">{parseFloat(roll.remainingLengthYard).toFixed(2)} yd</p>
                   {roll.salePricePerYard && (
-                    <p className="text-xs text-gray-500">
-                      {formatAmount(roll.salePricePerYard, GLOBAL_SALE_CURRENCY)}/yd
-                    </p>
+                    <p className="text-xs text-gray-500">{formatAmount(roll.salePricePerYard, GLOBAL_SALE_CURRENCY)}/yd</p>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
+
+      {/* Stock item picker modal */}
+      {stockPicker && (
+        <Modal
+          open
+          onClose={() => { setStockPicker(null); refocusBarcode(); }}
+          title={`Select Variant — ${stockPicker.productName}`}
+          size="sm"
+        >
+          <div className="space-y-2">
+            {stockPicker.items.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  addStockItemToCart(
+                    { id: stockPicker.productId, name: stockPicker.productName, productCode: stockPicker.productCode, productType: 'FIXED_PRODUCT' },
+                    item,
+                  );
+                  setStockPicker(null);
+                  refocusBarcode();
+                }}
+                className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-amber-50 rounded-lg text-sm text-left border border-transparent hover:border-amber-200 transition-colors"
+              >
+                <div>
+                  {item.color && <p className="font-medium text-gray-900">{item.color.name}{item.design ? ` · ${item.design.name}` : ''}</p>}
+                  {!item.color && <p className="font-medium text-gray-900">Default Variant</p>}
+                  {item.location && <p className="text-xs text-gray-400">{item.location}</p>}
+                  {item.barcodeValue && <p className="text-xs font-mono text-gray-400">{item.barcodeValue}</p>}
+                </div>
+                <div className="text-right">
+                  <p className={`font-mono font-medium ${parseFloat(item.quantityOnHand) > 0 ? 'text-green-700' : 'text-red-600'}`}>
+                    {parseFloat(item.quantityOnHand).toFixed(0)} {item.unit?.abbreviation ?? 'pc'}
+                  </p>
+                  {item.salePricePerUnit && (
+                    <p className="text-xs text-gray-500">{formatAmount(item.salePricePerUnit, GLOBAL_SALE_CURRENCY)}/pc</p>
                   )}
                 </div>
               </button>
@@ -778,16 +1179,13 @@ export default function RetailPOSPage() {
   );
 }
 
+// ── Receipt modal ────────────────────────────────────────────────────────────
+
 function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => void }) {
   const { invoice, company } = data;
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   return (
     <Modal open onClose={onClose} title="Sale Receipt" size="md">
-      {/* Print styles injected inline so only #receipt-content prints */}
       <style>{`
         @media print {
           body > *:not(#print-receipt-root) { display: none !important; }
@@ -797,14 +1195,12 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
 
       <div id="print-receipt-root">
         <div id="receipt-content" className="space-y-4 text-sm">
-          {/* Company header */}
           <div className="text-center border-b border-gray-200 pb-4">
             <h2 className="text-lg font-bold text-gray-900">{company.name}</h2>
             {company.address && <p className="text-gray-500 text-xs">{company.address}</p>}
             {company.phone && <p className="text-gray-500 text-xs">{company.phone}</p>}
           </div>
 
-          {/* Invoice info */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
               <p className="text-gray-500">Invoice</p>
@@ -827,7 +1223,6 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
             </div>
           </div>
 
-          {/* Line items */}
           <div className="border-t border-gray-200 pt-3">
             <table className="w-full text-xs">
               <thead>
@@ -843,11 +1238,13 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
                   <tr key={item.id}>
                     <td className="py-1.5">
                       <p className="font-medium text-gray-900">{item.product?.name}</p>
-                      <p className="text-gray-400 font-mono">{item.roll?.rollNumber}</p>
+                      {item.roll?.rollNumber && (
+                        <p className="text-gray-400 font-mono">{item.roll.rollNumber}</p>
+                      )}
                       {item.color && <p className="text-gray-400">{item.color.name}</p>}
                     </td>
                     <td className="text-right py-1.5 font-mono">
-                      {parseFloat(item.billedQuantity).toFixed(2)} {item.unit?.abbreviation}
+                      {parseFloat(item.billedQuantity).toFixed(2)} {item.unit?.abbreviation ?? (item.roll ? 'yd' : 'pc')}
                     </td>
                     <td className="text-right py-1.5 font-mono">
                       {formatAmount(item.unitPrice, GLOBAL_SALE_CURRENCY)}
@@ -861,7 +1258,6 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
             </table>
           </div>
 
-          {/* Totals */}
           <div className="border-t border-gray-200 pt-3 space-y-1 text-xs">
             {parseFloat(invoice.discountAmount) > 0 && (
               <div className="flex justify-between text-gray-600">
@@ -875,7 +1271,6 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
             </div>
           </div>
 
-          {/* Payments */}
           {invoice.salePayments && invoice.salePayments.length > 0 && (
             <div className="border-t border-gray-200 pt-3 space-y-1 text-xs">
               {invoice.salePayments.map((p) => (
@@ -899,10 +1294,9 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
         </div>
       </div>
 
-      {/* Action buttons (hidden on print) */}
       <div className="flex gap-3 mt-4 print:hidden">
         <button
-          onClick={handlePrint}
+          onClick={() => window.print()}
           className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
         >
           <Printer className="w-4 h-4" />

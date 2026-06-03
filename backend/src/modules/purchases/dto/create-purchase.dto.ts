@@ -39,6 +39,48 @@ export class CreatePurchaseRollDto {
   location?: string;
 }
 
+// For FIXED_PRODUCT and CUT_PIECE — quantity-based purchase lines
+export class CreatePurchaseItemLineDto {
+  @IsString()
+  productId!: string;
+
+  @IsOptional()
+  @IsString()
+  colorId?: string;
+
+  @IsOptional()
+  @IsString()
+  designId?: string;
+
+  @IsNumber()
+  @Min(0.0001)
+  quantity!: number;
+
+  @IsNumber()
+  @Min(0)
+  purchasePricePerUnit!: number;
+
+  @IsNumber()
+  @Min(0)
+  salePricePerUnit!: number;
+
+  @IsOptional()
+  @IsString()
+  barcodeValue?: string;
+
+  @IsOptional()
+  @IsString()
+  unitId?: string;
+
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
 export class CreatePurchaseDto {
   @IsString()
   supplierId!: string;
@@ -86,8 +128,13 @@ export class CreatePurchaseDto {
   @IsString()
   notes?: string;
 
+  @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => CreatePurchaseRollDto)
-  @ArrayMinSize(1)
-  rolls!: CreatePurchaseRollDto[];
+  rolls?: CreatePurchaseRollDto[];
+
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreatePurchaseItemLineDto)
+  items?: CreatePurchaseItemLineDto[];
 }

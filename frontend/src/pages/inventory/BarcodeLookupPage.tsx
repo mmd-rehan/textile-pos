@@ -120,6 +120,11 @@ export default function BarcodeLookupPage() {
       {result?.type === 'PRODUCT' && result.product && (
         <ProductResult result={result} onNavigate={(rollId) => navigate(`/inventory/rolls/${rollId}`)} />
       )}
+
+      {/* Stock item result */}
+      {result?.type === 'STOCK_ITEM' && result.stockItem && (
+        <StockItemResult result={result} onNavigate={() => navigate(`/catalog/products/${result.stockItem!.productId}`)} />
+      )}
     </div>
   );
 }
@@ -231,22 +236,21 @@ function ProductResult({
   onNavigate: (rollId: string) => void;
 }) {
   const product = result.product!;
+  const isRoll = product.productType === 'FABRIC_ROLL';
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <div className="px-5 py-3 bg-blue-50 flex items-center gap-2 text-sm font-medium text-blue-800">
         <Package className="w-4 h-4 shrink-0" />
-        Product barcode — showing available rolls
+        Product barcode — {isRoll ? 'showing available rolls' : 'showing stock items'}
       </div>
 
       <div className="p-5 space-y-4">
-        {/* Header */}
         <div>
           <p className="text-lg font-bold text-gray-900">{product.name}</p>
           <p className="text-sm text-gray-500 font-mono">{product.productCode} · {product.productType}</p>
         </div>
 
-        {/* Pricing */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Retail Price</p>
@@ -262,37 +266,145 @@ function ProductResult({
           </div>
         </div>
 
-        {/* Available rolls */}
-        {product.availableRolls.length === 0 ? (
-          <p className="text-sm text-gray-500 italic">No rolls currently in stock or allocated.</p>
-        ) : (
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Available Rolls ({product.availableRolls.length})
-            </p>
-            <div className="space-y-2">
-              {product.availableRolls.map((roll) => {
-                const s = STATUS_BADGE[roll.status];
-                return (
-                  <button
-                    key={roll.id}
-                    onClick={() => onNavigate(roll.id)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm text-left transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Badge variant={s.variant}>{s.label}</Badge>
-                      <span className="font-mono font-medium text-gray-900">{roll.rollNumber}</span>
-                      {roll.location && <span className="text-gray-400 text-xs">{roll.location}</span>}
-                    </div>
-                    <span className="font-mono text-gray-700">
-                      {parseFloat(roll.remainingLengthYard).toFixed(2)} yd
-                    </span>
-                  </button>
-                );
-              })}
+        {isRoll ? (
+          (product.availableRolls ?? []).length === 0 ? (
+            <p className="text-sm text-gray-500 italic">No rolls currently in stock.</p>
+          ) : (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Available Rolls ({product.availableRolls!.length})
+              </p>
+              <div className="space-y-2">
+                {product.availableRolls!.map((roll) => {
+                  const s = STATUS_BADGE[roll.status];
+                  return (
+                    <button
+                      key={roll.id}
+                      onClick={() => onNavigate(roll.id)}
+                      className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm text-left transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Badge variant={s.variant}>{s.label}</Badge>
+                        <span className="font-mono font-medium text-gray-900">{roll.rollNumber}</span>
+                        {roll.location && <span className="text-gray-400 text-xs">{roll.location}</span>}
+                      </div>
+                      <span className="font-mono text-gray-700">
+                        {parseFloat(roll.remainingLengthYard).toFixed(2)} yd
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )
+        ) : (
+          (product.stockItems ?? []).length === 0 ? (
+            <p className="text-sm text-gray-500 italic">No stock items available.</p>
+          ) : (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Stock Items ({product.stockItems!.length})
+              </p>
+              <div className="space-y-2">
+                {product.stockItems!.map((item) => {
+                  const qty = parseFloat(item.quantityOnHand);
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-lg text-sm"
+                    >
+                      <div>
+                        {item.color ? (
+                          <p className="font-medium text-gray-900">{item.color.name}{item.design ? ` · ${item.design.name}` : ''}</p>
+                        ) : (
+                          <p className="text-gray-400 italic">Default</p>
+                        )}
+                        {item.barcodeValue && <p className="text-xs font-mono text-gray-400">{item.barcodeValue}</p>}
+                        {item.location && <p className="text-xs text-gray-400">{item.location}</p>}
+                      </div>
+                      <div className="text-right">
+                        <p className={`font-mono font-semibold ${qty > 0 ? 'text-green-700' : 'text-red-600'}`}>
+                          {qty.toFixed(0)} {item.unit?.abbreviation ?? 'pc'}
+                        </p>
+                        {item.salePricePerUnit && (
+                          <p className="text-xs text-gray-500">{formatAmount(item.salePricePerUnit, GLOBAL_SALE_CURRENCY)}/pc</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )
         )}
+      </div>
+    </div>
+  );
+}
+
+function StockItemResult({
+  result,
+  onNavigate,
+}: {
+  result: BarcodeLookupResult;
+  onNavigate: () => void;
+}) {
+  const si = result.stockItem!;
+  const qty = parseFloat(si.quantityOnHand);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 bg-amber-50 flex items-center gap-2 text-sm font-medium text-amber-800">
+        <Package className="w-4 h-4 shrink-0" />
+        Stock item barcode
+      </div>
+      <div className="p-5 space-y-4">
+        <div>
+          <p className="text-lg font-bold text-gray-900">{si.product.name}</p>
+          <p className="text-sm text-gray-500 font-mono">{si.product.productCode} · {si.product.productType}</p>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">On Hand</p>
+            <p className={`text-base font-bold mt-0.5 font-mono ${qty > 0 ? 'text-green-700' : 'text-red-600'}`}>
+              {qty.toFixed(0)} {si.unit?.abbreviation ?? 'pc'}
+            </p>
+          </div>
+          {si.salePricePerUnit && (
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sale Price</p>
+              <p className="text-base font-bold text-gray-900 mt-0.5 font-mono">
+                {formatAmount(si.salePricePerUnit, GLOBAL_SALE_CURRENCY)}
+              </p>
+            </div>
+          )}
+          {si.location && (
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Location</p>
+              <p className="text-base font-bold text-gray-900 mt-0.5">{si.location}</p>
+            </div>
+          )}
+        </div>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          {si.color && (
+            <>
+              <dt className="text-gray-500">Color</dt>
+              <dd className="text-gray-900">{si.color.name}</dd>
+            </>
+          )}
+          {si.design && (
+            <>
+              <dt className="text-gray-500">Design</dt>
+              <dd className="text-gray-900">{si.design.name}</dd>
+            </>
+          )}
+        </dl>
+        <button
+          onClick={onNavigate}
+          className="w-full py-2 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50"
+        >
+          View Product →
+        </button>
       </div>
     </div>
   );
