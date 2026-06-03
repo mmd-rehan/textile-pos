@@ -65,6 +65,10 @@ export class InventoryService {
             remainingLengthYard: true,
           },
         },
+        productStockItems: {
+          where: { isActive: true },
+          select: { id: true, quantityOnHand: true },
+        },
       },
       orderBy: { name: 'asc' },
     });
@@ -73,11 +77,16 @@ export class InventoryService {
       const rollCounts = { IN_STOCK: 0, ALLOCATED: 0, SOLD: 0, WASTED: 0, DAMAGED: 0 };
       let totalOriginalYard = 0;
       let totalRemainingYard = 0;
+      let totalQuantityOnHand = 0;
 
       for (const roll of p.rolls) {
         rollCounts[roll.status] = (rollCounts[roll.status] ?? 0) + 1;
         totalOriginalYard += Number(roll.originalLengthYard);
         totalRemainingYard += Number(roll.remainingLengthYard);
+      }
+
+      for (const si of p.productStockItems) {
+        totalQuantityOnHand += Number(si.quantityOnHand);
       }
 
       return {
@@ -87,10 +96,14 @@ export class InventoryService {
         productType: p.productType,
         retailPrice: p.retailPrice,
         wholesalePrice: p.wholesalePrice,
+        // Roll-based stats (FABRIC_ROLL)
         totalRolls: p.rolls.length,
         rollCounts,
         totalOriginalYard: totalOriginalYard.toFixed(4),
         totalRemainingYard: totalRemainingYard.toFixed(4),
+        // Quantity-based stats (FIXED_PRODUCT / CUT_PIECE)
+        totalQuantityOnHand: totalQuantityOnHand.toFixed(4),
+        stockItemCount: p.productStockItems.length,
       };
     });
 

@@ -11,6 +11,7 @@ import BrandsPage from './pages/catalog/BrandsPage';
 import CategoriesPage from './pages/catalog/CategoriesPage';
 import ColorsPage from './pages/catalog/ColorsPage';
 import DesignsPage from './pages/catalog/DesignsPage';
+import ProductDetailPage from './pages/catalog/ProductDetailPage';
 import ProductForm from './pages/catalog/ProductForm';
 import ProductsPage from './pages/catalog/ProductsPage';
 import BarcodeLookupPage from './pages/inventory/BarcodeLookupPage';
@@ -83,6 +84,14 @@ function App() {
             element={
               <ProtectedRoute permission="write:products">
                 <ProductForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="catalog/products/:id"
+            element={
+              <ProtectedRoute permission="read:products">
+                <ProductDetailPage />
               </ProtectedRoute>
             }
           />

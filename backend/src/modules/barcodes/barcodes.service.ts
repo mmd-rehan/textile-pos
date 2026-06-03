@@ -51,13 +51,14 @@ export class BarcodesService {
       };
     }
 
-    // 2. Check products
+    // 2. Check product barcode
     const product = await this.prisma.product.findUnique({
       where: { barcode },
       include: {
         category: { select: { id: true, name: true } },
         color: { select: { id: true, name: true, colorCode: true } },
         design: { select: { id: true, name: true, designCode: true } },
+        defaultUnit: { select: { id: true, name: true, abbreviation: true } },
         rolls: {
           where: { status: { in: ['IN_STOCK', 'ALLOCATED'] } },
           select: {
@@ -71,10 +72,25 @@ export class BarcodesService {
           },
           orderBy: { createdAt: 'asc' },
         },
+        productStockItems: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            quantityOnHand: true,
+            barcodeValue: true,
+            salePricePerUnit: true,
+            location: true,
+            color: { select: { id: true, name: true } },
+            design: { select: { id: true, name: true } },
+            unit: { select: { id: true, name: true, abbreviation: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
     if (product) {
+      const isFabricRoll = product.productType === 'FABRIC_ROLL';
       return {
         type: 'PRODUCT' as const,
         blocked: false,
@@ -91,7 +107,47 @@ export class BarcodesService {
           category: product.category,
           color: product.color,
           design: product.design,
-          availableRolls: product.rolls,
+          defaultUnit: product.defaultUnit,
+          availableRolls: isFabricRoll ? product.rolls : [],
+          stockItems: !isFabricRoll ? product.productStockItems : [],
+        },
+      };
+    }
+
+    // 3. Check ProductStockItem barcode
+    const stockItem = await this.prisma.productStockItem.findUnique({
+      where: { barcodeValue: barcode },
+      include: {
+        product: { select: { id: true, name: true, productCode: true, productType: true } },
+        color: { select: { id: true, name: true } },
+        design: { select: { id: true, name: true } },
+        unit: { select: { id: true, name: true, abbreviation: true } },
+      },
+    });
+
+    if (stockItem) {
+      const outOfStock = stockItem.quantityOnHand.lte(0);
+      return {
+        type: 'STOCK_ITEM' as const,
+        blocked: !stockItem.isActive || outOfStock,
+        warning: false,
+        statusMessage: !stockItem.isActive
+          ? 'Stock item is inactive'
+          : outOfStock
+            ? 'Out of stock'
+            : null,
+        stockItem: {
+          id: stockItem.id,
+          productId: stockItem.productId,
+          barcodeValue: stockItem.barcodeValue,
+          quantityOnHand: stockItem.quantityOnHand,
+          salePricePerUnit: stockItem.salePricePerUnit,
+          location: stockItem.location,
+          isActive: stockItem.isActive,
+          product: stockItem.product,
+          color: stockItem.color,
+          design: stockItem.design,
+          unit: stockItem.unit,
         },
       };
     }

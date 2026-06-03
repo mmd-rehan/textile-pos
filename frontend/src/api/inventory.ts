@@ -1,4 +1,4 @@
-import type { BarcodeLookupResult, InventoryMovement, StockSummaryItem } from '../types';
+import type { BarcodeLookupResult, InventoryMovement, POSSearchResult, StockSummaryItem } from '../types';
 import apiClient from './client';
 
 export interface MovementsQuery {
@@ -27,4 +27,7 @@ export const inventoryApi = {
     params: { page?: number; limit?: number; movementType?: string; direction?: string } = {},
   ): Promise<{ data: InventoryMovement[]; meta: any }> =>
     apiClient.get(`/rolls/${rollId}/movements`, { params }),
+
+  posSearch: (search: string, limit = 10): Promise<{ data: POSSearchResult[] }> =>
+    apiClient.get('/products/pos-search', { params: { search, limit } }),
 };

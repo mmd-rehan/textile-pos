@@ -19,6 +19,19 @@ export interface CreatePurchaseRollInput {
   location?: string;
 }
 
+export interface CreatePurchaseItemLineInput {
+  productId: string;
+  colorId?: string;
+  designId?: string;
+  quantity: number;
+  purchasePricePerUnit: number;
+  salePricePerUnit: number;
+  barcodeValue?: string;
+  unitId?: string;
+  location?: string;
+  description?: string;
+}
+
 export interface CreatePurchaseInput {
   supplierId: string;
   currency?: string;
@@ -31,7 +44,8 @@ export interface CreatePurchaseInput {
   orderDate?: string;
   deliveryDate?: string;
   notes?: string;
-  rolls: CreatePurchaseRollInput[];
+  rolls?: CreatePurchaseRollInput[];
+  items?: CreatePurchaseItemLineInput[];
 }
 
 export interface CreatePaymentInput {

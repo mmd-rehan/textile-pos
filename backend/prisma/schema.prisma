@@ -296,10 +296,11 @@ model Color {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  products      Product[]
-  productColors ProductColor[]
-  rolls         Roll[]
-  saleItems     SaleInvoiceItem[]
+  products         Product[]
+  productColors    ProductColor[]
+  rolls            Roll[]
+  saleItems        SaleInvoiceItem[]
+  productStockItems ProductStockItem[]
 
   @@map("colors")
 }
@@ -314,10 +315,11 @@ model Design {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  products       Product[]
-  productDesigns ProductDesign[]
-  rolls          Roll[]
-  saleItems      SaleInvoiceItem[]
+  products          Product[]
+  productDesigns    ProductDesign[]
+  rolls             Roll[]
+  saleItems         SaleInvoiceItem[]
+  productStockItems ProductStockItem[]
 
   @@map("designs")
 }
@@ -353,6 +355,7 @@ model Product {
   inventoryMovements InventoryMovement[]
   stockAdjustments   StockAdjustment[]
   wastageEntries     WastageEntry[]
+  productStockItems  ProductStockItem[]
 
   @@index([barcode])
   @@index([productCode])
@@ -394,13 +397,14 @@ model Unit {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  products           Product[]
-  sourceConversions  UnitConversion[]    @relation("SourceUnitConversions")
-  targetConversions  UnitConversion[]    @relation("TargetUnitConversions")
+  products          Product[]
+  sourceConversions UnitConversion[]    @relation("SourceUnitConversions")
+  targetConversions UnitConversion[]    @relation("TargetUnitConversions")
   inventoryMovements InventoryMovement[]
   wastageEntries     WastageEntry[]
   saleInvoiceItems   SaleInvoiceItem[]
   purchaseItems      PurchaseItem[]
+  productStockItems  ProductStockItem[]
 
   @@map("units")
 }
@@ -475,28 +479,61 @@ model Roll {
   @@map("rolls")
 }
 
-model InventoryMovement {
-  id             String            @id @default(uuid())
-  productId      String            @map("product_id")
-  rollId         String?           @map("roll_id")
-  movementType   MovementType      @map("movement_type")
-  direction      MovementDirection
-  quantity       Decimal           @db.Decimal(12, 4)
-  unitId         String            @map("unit_id")
-  beforeQuantity Decimal?          @db.Decimal(12, 4) @map("before_quantity")
-  afterQuantity  Decimal?          @db.Decimal(12, 4) @map("after_quantity")
-  referenceType  String            @map("reference_type")
-  referenceId    String?           @map("reference_id")
-  remarks        String?           @db.Text
-  userId         String            @map("user_id")
-  createdAt      DateTime          @default(now()) @map("created_at")
+// Quantity-based stock for FIXED_PRODUCT and CUT_PIECE
+model ProductStockItem {
+  id                               String   @id @default(uuid())
+  productId                        String   @map("product_id")
+  colorId                          String?  @map("color_id")
+  designId                         String?  @map("design_id")
+  barcodeValue                     String?  @unique @map("barcode_value")
+  quantityOnHand                   Decimal  @db.Decimal(12, 4) @map("quantity_on_hand")
+  unitId                           String   @map("unit_id")
+  purchasePricePerUnitBaseCurrency Decimal? @db.Decimal(14, 2) @map("purchase_price_per_unit_base_ccy")
+  salePricePerUnit                 Decimal? @db.Decimal(12, 2) @map("sale_price_per_unit")
+  location                         String?
+  description                      String?  @db.Text
+  isActive                         Boolean  @default(true) @map("is_active")
+  createdAt                        DateTime @default(now()) @map("created_at")
+  updatedAt                        DateTime @updatedAt @map("updated_at")
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
-  roll    Roll?   @relation(fields: [rollId], references: [id], onDelete: SetNull)
-  unit    Unit    @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  product            Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  color              Color?            @relation(fields: [colorId], references: [id], onDelete: SetNull)
+  design             Design?           @relation(fields: [designId], references: [id], onDelete: SetNull)
+  unit               Unit              @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  purchaseItems      PurchaseItem[]
+  saleInvoiceItems   SaleInvoiceItem[]
+  inventoryMovements InventoryMovement[]
+
+  @@index([productId])
+  @@index([barcodeValue])
+  @@map("product_stock_items")
+}
+
+model InventoryMovement {
+  id                 String            @id @default(uuid())
+  productId          String            @map("product_id")
+  rollId             String?           @map("roll_id")
+  productStockItemId String?           @map("product_stock_item_id")
+  movementType       MovementType      @map("movement_type")
+  direction          MovementDirection
+  quantity           Decimal           @db.Decimal(12, 4)
+  unitId             String            @map("unit_id")
+  beforeQuantity     Decimal?          @db.Decimal(12, 4) @map("before_quantity")
+  afterQuantity      Decimal?          @db.Decimal(12, 4) @map("after_quantity")
+  referenceType      String            @map("reference_type")
+  referenceId        String?           @map("reference_id")
+  remarks            String?           @db.Text
+  userId             String            @map("user_id")
+  createdAt          DateTime          @default(now()) @map("created_at")
+
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  roll             Roll?             @relation(fields: [rollId], references: [id], onDelete: SetNull)
+  productStockItem ProductStockItem? @relation(fields: [productStockItemId], references: [id], onDelete: SetNull)
+  unit             Unit              @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([rollId])
+  @@index([productStockItemId])
   @@map("inventory_movements")
 }
 
@@ -620,31 +657,34 @@ model SaleInvoice {
 }
 
 model SaleInvoiceItem {
-  id                String   @id @default(uuid())
-  invoiceId         String   @map("invoice_id")
-  productId         String   @map("product_id")
-  rollId            String?  @map("roll_id")
-  colorId           String?  @map("color_id")
-  designId          String?  @map("design_id")
-  billedQuantity    Decimal  @db.Decimal(12, 4) @map("billed_quantity")
-  actualCutQuantity Decimal  @db.Decimal(12, 4) @map("actual_cut_quantity")
-  unitId            String   @map("unit_id")
-  unitPrice         Decimal  @db.Decimal(12, 2) @map("unit_price")
-  discountAmount    Decimal  @db.Decimal(12, 2) @default(0.00) @map("discount_amount")
-  taxAmount         Decimal  @db.Decimal(12, 2) @default(0.00) @map("tax_amount")
-  subTotal          Decimal  @db.Decimal(12, 2) @map("sub_total")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  invoiceId          String   @map("invoice_id")
+  productId          String   @map("product_id")
+  rollId             String?  @map("roll_id")
+  productStockItemId String?  @map("product_stock_item_id")
+  colorId            String?  @map("color_id")
+  designId           String?  @map("design_id")
+  billedQuantity     Decimal  @db.Decimal(12, 4) @map("billed_quantity")
+  actualCutQuantity  Decimal? @db.Decimal(12, 4) @map("actual_cut_quantity")
+  unitId             String   @map("unit_id")
+  unitPrice          Decimal  @db.Decimal(12, 2) @map("unit_price")
+  discountAmount     Decimal  @db.Decimal(12, 2) @default(0.00) @map("discount_amount")
+  taxAmount          Decimal  @db.Decimal(12, 2) @default(0.00) @map("tax_amount")
+  subTotal           Decimal  @db.Decimal(12, 2) @map("sub_total")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
-  saleInvoice SaleInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  product     Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
-  roll        Roll?       @relation(fields: [rollId], references: [id], onDelete: SetNull)
-  color       Color?      @relation(fields: [colorId], references: [id], onDelete: SetNull)
-  design      Design?     @relation(fields: [designId], references: [id], onDelete: SetNull)
-  unit        Unit        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  saleInvoice      SaleInvoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  roll             Roll?             @relation(fields: [rollId], references: [id], onDelete: SetNull)
+  productStockItem ProductStockItem? @relation(fields: [productStockItemId], references: [id], onDelete: SetNull)
+  color            Color?            @relation(fields: [colorId], references: [id], onDelete: SetNull)
+  design           Design?           @relation(fields: [designId], references: [id], onDelete: SetNull)
+  unit             Unit              @relation(fields: [unitId], references: [id], onDelete: Restrict)
 
   @@index([rollId])
   @@index([invoiceId])
+  @@index([productStockItemId])
   @@map("sale_invoice_items")
 }
 
@@ -748,6 +788,7 @@ model PurchaseItem {
   id                        String   @id @default(uuid())
   purchaseOrderId           String   @map("purchase_order_id")
   productId                 String   @map("product_id")
+  productStockItemId        String?  @map("product_stock_item_id")
   orderedQuantity           Decimal  @db.Decimal(12, 4) @map("ordered_quantity")
   receivedQuantity          Decimal  @db.Decimal(12, 4) @default(0.00) @map("received_quantity")
   unitId                    String   @map("unit_id")
@@ -758,9 +799,10 @@ model PurchaseItem {
   createdAt                 DateTime @default(now()) @map("created_at")
   updatedAt                 DateTime @updatedAt @map("updated_at")
 
-  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
-  unit          Unit          @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  purchaseOrder    PurchaseOrder     @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  unit             Unit              @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  productStockItem ProductStockItem? @relation(fields: [productStockItemId], references: [id], onDelete: SetNull)
 
   @@map("purchase_items")
 }

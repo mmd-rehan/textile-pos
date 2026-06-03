@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { Color, Design, Product, CreateProductForm, CreateColorForm, CreateDesignForm } from '../types';
+import type { Color, Design, Product, ProductStockItem, CreateProductForm, CreateColorForm, CreateDesignForm } from '../types';
 
 export interface ProductQuery {
   page?: number;
@@ -44,6 +44,9 @@ export const productsApi = {
 
   removeDesign: (productId: string, designId: string): Promise<{ data: any }> =>
     apiClient.delete(`/products/${productId}/designs/${designId}`),
+
+  getStockItems: (productId: string): Promise<{ data: ProductStockItem[] }> =>
+    apiClient.get(`/products/${productId}/stock-items`),
 };
 
 export const colorsApi = {

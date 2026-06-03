@@ -10,8 +10,18 @@ const INVOICE_INCLUDE = {
   cashier: { select: { id: true, username: true } },
   saleInvoiceItems: {
     include: {
-      product: { select: { id: true, name: true, productCode: true } },
+      product: { select: { id: true, name: true, productCode: true, productType: true } },
       roll: { select: { id: true, rollNumber: true, barcode: true } },
+      productStockItem: {
+        select: {
+          id: true,
+          quantityOnHand: true,
+          barcodeValue: true,
+          color: { select: { id: true, name: true } },
+          design: { select: { id: true, name: true } },
+          unit: { select: { id: true, name: true, abbreviation: true } },
+        },
+      },
       color: { select: { id: true, name: true } },
       design: { select: { id: true, name: true } },
       unit: { select: { id: true, name: true, abbreviation: true } },
@@ -24,7 +34,8 @@ const INVOICE_INCLUDE = {
   },
 } as const;
 
-interface ProcessedLine {
+interface ProcessedRollLine {
+  lineType: 'ROLL';
   productId: string;
   rollId: string;
   colorId: string | null;
@@ -45,12 +56,27 @@ interface ProcessedLine {
   rollNumber: string;
 }
 
+interface ProcessedQuantityLine {
+  lineType: 'QUANTITY';
+  productId: string;
+  productStockItemId: string;
+  colorId: string | null;
+  designId: string | null;
+  unitId: string;
+  billedQty: Prisma.Decimal;
+  qtyBefore: Prisma.Decimal;
+  qtyAfter: Prisma.Decimal;
+  unitPrice: Prisma.Decimal;
+  discountAmount: Prisma.Decimal;
+  grossSubTotal: Prisma.Decimal;
+  subTotal: Prisma.Decimal;
+}
+
 @Injectable()
 export class SalesService {
   constructor(private readonly prisma: PrismaService) { }
 
   async createRetailSale(dto: CreateRetailSaleDto, userId: string, idempotencyKey?: string) {
-    // Idempotency: return existing sale if this key was already processed
     if (idempotencyKey) {
       const existing = await this.prisma.saleInvoice.findUnique({
         where: { idempotencyKey },
@@ -59,16 +85,21 @@ export class SalesService {
       if (existing) return existing;
     }
 
+    const rollLineCount = dto.lines?.length ?? 0;
+    const qtyLineCount = dto.quantityLines?.length ?? 0;
+    if (rollLineCount + qtyLineCount === 0) {
+      throw AppError.badRequest('Sale must have at least one line item', 'EMPTY_SALE');
+    }
+
     const invoiceId = await this.prisma.$transaction(
       async (tx) => {
-        // Load unit records
+        // ── Load units ────────────────────────────────────────────────────────
         const [yardUnit, meterUnit] = await Promise.all([
           tx.unit.findFirst({ where: { abbreviation: 'yd' } }),
           tx.unit.findFirst({ where: { abbreviation: 'm' } }),
         ]);
         if (!yardUnit) throw AppError.internal('Yard unit not configured', 'UNIT_NOT_FOUND');
 
-        // Resolve meter→yard factor from DB conversion table
         let meterToYardFactor = new Prisma.Decimal('1.093613');
         if (meterUnit) {
           const conv = await tx.unitConversion.findFirst({
@@ -85,10 +116,10 @@ export class SalesService {
           if (!customer) throw AppError.notFound('Customer not found', 'CUSTOMER_NOT_FOUND');
         }
 
-        const processedLines: ProcessedLine[] = [];
+        // ── Process roll lines ────────────────────────────────────────────────
+        const processedRollLines: ProcessedRollLine[] = [];
 
-        for (const line of dto.lines) {
-          // Load roll within transaction for correct isolation
+        for (const line of dto.lines ?? []) {
           const roll = await tx.roll.findUnique({ where: { id: line.rollId } });
           if (!roll) throw AppError.notFound(`Roll not found: ${line.rollId}`, 'ROLL_NOT_FOUND');
 
@@ -126,7 +157,6 @@ export class SalesService {
             );
           }
 
-          // Wastage: actual cut beyond billed quantity (both in yards)
           const wastageYard = actualCutYard.gt(billedYard)
             ? actualCutYard.minus(billedYard).toDecimalPlaces(4)
             : new Prisma.Decimal(0);
@@ -145,7 +175,8 @@ export class SalesService {
           const rollRemainingAfter = rollRemainingBefore.minus(actualCutYard).toDecimalPlaces(4);
           const newRollStatus = rollRemainingAfter.lte(0) ? 'SOLD' : roll.status;
 
-          processedLines.push({
+          processedRollLines.push({
+            lineType: 'ROLL',
             productId: line.productId,
             rollId: line.rollId,
             colorId: roll.colorId,
@@ -167,16 +198,76 @@ export class SalesService {
           });
         }
 
-        // Invoice totals
-        const totalAmount = processedLines
-          .reduce((s, l) => s.plus(l.grossSubTotal), new Prisma.Decimal(0))
-          .toDecimalPlaces(2);
-        const totalDiscount = processedLines
-          .reduce((s, l) => s.plus(l.discountAmount), new Prisma.Decimal(0))
-          .toDecimalPlaces(2);
+        // ── Process quantity lines ────────────────────────────────────────────
+        const processedQuantityLines: ProcessedQuantityLine[] = [];
+
+        for (const line of dto.quantityLines ?? []) {
+          const stockItem = await tx.productStockItem.findUnique({
+            where: { id: line.productStockItemId },
+          });
+          if (!stockItem) {
+            throw AppError.notFound(`Stock item not found: ${line.productStockItemId}`, 'STOCK_ITEM_NOT_FOUND');
+          }
+          if (stockItem.productId !== line.productId) {
+            throw AppError.badRequest(
+              `Stock item does not belong to product ${line.productId}`,
+              'STOCK_ITEM_PRODUCT_MISMATCH',
+            );
+          }
+          if (!stockItem.isActive) {
+            throw AppError.badRequest(`Stock item is inactive and cannot be sold`, 'STOCK_ITEM_INACTIVE');
+          }
+
+          const billedQty = new Prisma.Decimal(line.quantity.toString());
+          const qtyBefore = new Prisma.Decimal(stockItem.quantityOnHand.toString());
+
+          if (billedQty.gt(qtyBefore)) {
+            throw AppError.badRequest(
+              `Insufficient stock: requested ${billedQty.toFixed(4)}, available ${qtyBefore.toFixed(4)}`,
+              'INSUFFICIENT_STOCK',
+            );
+          }
+
+          const qtyAfter = qtyBefore.minus(billedQty).toDecimalPlaces(4);
+          const unitPrice = new Prisma.Decimal(line.unitPrice.toString());
+          const discountAmount = new Prisma.Decimal((line.discountAmount ?? 0).toString());
+          const grossSubTotal = billedQty.times(unitPrice).toDecimalPlaces(2);
+          const subTotal = grossSubTotal.minus(discountAmount).toDecimalPlaces(2);
+          if (subTotal.lt(0)) {
+            throw AppError.badRequest(`Line subtotal cannot be negative`, 'NEGATIVE_SUBTOTAL');
+          }
+
+          processedQuantityLines.push({
+            lineType: 'QUANTITY',
+            productId: line.productId,
+            productStockItemId: line.productStockItemId,
+            colorId: stockItem.colorId,
+            designId: stockItem.designId,
+            unitId: stockItem.unitId,
+            billedQty,
+            qtyBefore,
+            qtyAfter,
+            unitPrice,
+            discountAmount,
+            grossSubTotal,
+            subTotal,
+          });
+        }
+
+        // ── Invoice totals ────────────────────────────────────────────────────
+        const totalAmount = [
+          ...processedRollLines.map((l) => l.grossSubTotal),
+          ...processedQuantityLines.map((l) => l.grossSubTotal),
+        ].reduce((s, v) => s.plus(v), new Prisma.Decimal(0)).toDecimalPlaces(2);
+
+        const totalDiscount = [
+          ...processedRollLines.map((l) => l.discountAmount),
+          ...processedQuantityLines.map((l) => l.discountAmount),
+        ].reduce((s, v) => s.plus(v), new Prisma.Decimal(0)).toDecimalPlaces(2);
+
         const netAmount = totalAmount.minus(totalDiscount).toDecimalPlaces(2);
 
-        const totalPaid = dto.payments
+        const totalPaid = (dto.payments ?? [])
           .reduce((s, p) => s.plus(new Prisma.Decimal(p.amount.toString())), new Prisma.Decimal(0))
           .toDecimalPlaces(2);
         const rawDue = netAmount.minus(totalPaid);
@@ -216,8 +307,8 @@ export class SalesService {
           },
         });
 
-        // Create line items, deduct rolls, record movements and wastage
-        for (const line of processedLines) {
+        // ── Write roll line items, deduct rolls, record movements + wastage ──
+        for (const line of processedRollLines) {
           await tx.saleInvoiceItem.create({
             data: {
               invoiceId: invoice.id,
@@ -274,8 +365,51 @@ export class SalesService {
           }
         }
 
-        // Payment records
-        for (const payment of dto.payments) {
+        // ── Write quantity line items, deduct stock ───────────────────────────
+        for (const line of processedQuantityLines) {
+          await tx.saleInvoiceItem.create({
+            data: {
+              invoiceId: invoice.id,
+              productId: line.productId,
+              productStockItemId: line.productStockItemId,
+              rollId: null,
+              colorId: line.colorId,
+              designId: line.designId,
+              billedQuantity: line.billedQty,
+              actualCutQuantity: null,
+              unitId: line.unitId,
+              unitPrice: line.unitPrice,
+              discountAmount: line.discountAmount,
+              taxAmount: new Prisma.Decimal(0),
+              subTotal: line.subTotal,
+            },
+          });
+
+          await tx.productStockItem.update({
+            where: { id: line.productStockItemId },
+            data: { quantityOnHand: line.qtyAfter },
+          });
+
+          await tx.inventoryMovement.create({
+            data: {
+              productId: line.productId,
+              productStockItemId: line.productStockItemId,
+              movementType: 'SALE',
+              direction: 'OUT',
+              quantity: line.billedQty,
+              unitId: line.unitId,
+              beforeQuantity: line.qtyBefore,
+              afterQuantity: line.qtyAfter,
+              referenceType: 'SALE_INVOICE',
+              referenceId: invoice.id,
+              remarks: `Sale ${invoiceNumber}`,
+              userId,
+            },
+          });
+        }
+
+        // ── Payment records ───────────────────────────────────────────────────
+        for (const payment of dto.payments ?? []) {
           const amt = new Prisma.Decimal(payment.amount.toString());
           if (amt.lte(0)) continue;
           await tx.salePayment.create({
@@ -289,7 +423,7 @@ export class SalesService {
           });
         }
 
-        // Customer ledger debit if unpaid balance
+        // ── Customer ledger ───────────────────────────────────────────────────
         if (dueAmount.gt(0) && dto.customerId) {
           const customer = await tx.customer.findUnique({ where: { id: dto.customerId } });
           if (customer) {
@@ -327,8 +461,10 @@ export class SalesService {
               netAmount: netAmount.toString(),
               totalPaid: totalPaid.toString(),
               dueAmount: dueAmount.toString(),
-              lineCount: processedLines.length,
-              rollIds: processedLines.map((l) => l.rollId),
+              rollLineCount: processedRollLines.length,
+              quantityLineCount: processedQuantityLines.length,
+              rollIds: processedRollLines.map((l) => l.rollId),
+              stockItemIds: processedQuantityLines.map((l) => l.productStockItemId),
             }),
           },
         });
