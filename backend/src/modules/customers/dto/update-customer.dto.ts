@@ -1,9 +1,10 @@
 import { Type } from 'class-transformer';
 import { IsEmail, IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
-export class CreateCustomerDto {
+export class UpdateCustomerDto {
+  @IsOptional()
   @IsString()
-  name!: string;
+  name?: string;
 
   @IsOptional()
   @IsEmail()
@@ -29,5 +30,5 @@ export class CreateCustomerDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  creditLimit?: number;
+  creditLimit?: number | null;
 }

@@ -16,6 +16,7 @@ import {
   ShoppingCart,
   Tag,
   Truck,
+  User,
   Users,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -35,6 +36,11 @@ const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Retail POS', href: '/pos/retail', icon: ShoppingCart, permission: 'write:sales' },
   { name: 'Sales History', href: '/sales/history', icon: History, permission: 'read:sales' },
+];
+
+const customerLinks: NavItem[] = [
+  { name: 'All Customers', href: '/customers', icon: Users, permission: 'read:sales' },
+  { name: 'New Customer', href: '/customers/new', icon: User, permission: 'write:sales' },
 ];
 
 const purchaseLinks: NavItem[] = [
@@ -66,18 +72,22 @@ export default function Shell() {
   const [catalogOpen, setCatalogOpen] = useState(location.pathname.startsWith('/catalog'));
   const [purchasesOpen, setPurchasesOpen] = useState(location.pathname.startsWith('/purchases'));
   const [inventoryOpen, setInventoryOpen] = useState(location.pathname.startsWith('/inventory'));
+  const [customersOpen, setCustomersOpen] = useState(location.pathname.startsWith('/customers'));
 
   const isCatalog = location.pathname.startsWith('/catalog');
   const isPurchases = location.pathname.startsWith('/purchases');
   const isInventory = location.pathname.startsWith('/inventory');
+  const isCustomers = location.pathname.startsWith('/customers');
 
   const permissions = user?.permissions ?? [];
   const can = (p: string) => permissions.includes(p);
 
   const visibleNav = navigation.filter((item) => !item.permission || can(item.permission));
+  const visibleCustomers = customerLinks.filter((item) => !item.permission || can(item.permission));
   const visiblePurchases = purchaseLinks.filter((item) => !item.permission || can(item.permission));
   const visibleInventory = inventoryLinks.filter((item) => !item.permission || can(item.permission));
   const visibleCatalog = catalogLinks.filter((item) => !item.permission || can(item.permission));
+  const showCustomersSection = visibleCustomers.length > 0;
   const showPurchasesSection = visiblePurchases.length > 0;
   const showInventorySection = visibleInventory.length > 0;
   const showCatalogSection = visibleCatalog.length > 0;
@@ -128,6 +138,58 @@ export default function Shell() {
               </Link>
             );
           })}
+
+          {/* Customers section */}
+          {showCustomersSection && (
+            <div className="pt-2">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => setCustomersOpen((o) => !o)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-colors ${isCustomers
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Users className="w-5 h-5 shrink-0" />
+                    <span>Customers</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${customersOpen ? 'rotate-180' : ''}`} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate('/customers')}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg font-medium transition-colors w-full ${isCustomers
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                >
+                  <Users className="w-5 h-5 shrink-0" />
+                </button>
+              )}
+              {sidebarOpen && customersOpen && (
+                <div className="ml-8 mt-1 space-y-0.5">
+                  {visibleCustomers.map((item) => {
+                    const isActive = location.pathname === item.href;
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive
+                          ? 'text-primary-600 bg-primary-50'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Purchases section */}
           {showPurchasesSection && (

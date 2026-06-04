@@ -14,6 +14,9 @@ import DesignsPage from './pages/catalog/DesignsPage';
 import ProductDetailPage from './pages/catalog/ProductDetailPage';
 import ProductForm from './pages/catalog/ProductForm';
 import ProductsPage from './pages/catalog/ProductsPage';
+import CustomerDetailPage from './pages/customers/CustomerDetailPage';
+import CustomerForm from './pages/customers/CustomerForm';
+import CustomersPage from './pages/customers/CustomersPage';
 import BarcodeLookupPage from './pages/inventory/BarcodeLookupPage';
 import MovementsPage from './pages/inventory/MovementsPage';
 import RollDetailPage from './pages/inventory/RollDetailPage';
@@ -140,6 +143,40 @@ function App() {
             element={
               <ProtectedRoute permission="read:inventory">
                 <BatchesPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Customers */}
+          <Route
+            path="customers"
+            element={
+              <ProtectedRoute permission="read:sales">
+                <CustomersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="customers/new"
+            element={
+              <ProtectedRoute permission="write:sales">
+                <CustomerForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="customers/:id"
+            element={
+              <ProtectedRoute permission="read:sales">
+                <CustomerDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="customers/:id/edit"
+            element={
+              <ProtectedRoute permission="write:sales">
+                <CustomerForm />
               </ProtectedRoute>
             }
           />

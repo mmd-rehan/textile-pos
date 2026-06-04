@@ -111,9 +111,12 @@ export class SalesService {
         if (dto.customerId) {
           const customer = await tx.customer.findUnique({
             where: { id: dto.customerId },
-            select: { id: true },
+            select: { id: true, status: true },
           });
           if (!customer) throw AppError.notFound('Customer not found', 'CUSTOMER_NOT_FOUND');
+          if (customer.status === 'INACTIVE') {
+            throw AppError.badRequest('Customer account is inactive', 'CUSTOMER_INACTIVE');
+          }
         }
 
         // ── Process roll lines ────────────────────────────────────────────────
@@ -427,6 +430,16 @@ export class SalesService {
         if (dueAmount.gt(0) && dto.customerId) {
           const customer = await tx.customer.findUnique({ where: { id: dto.customerId } });
           if (customer) {
+            if (customer.type === 'CREDIT' && customer.creditLimit) {
+              const projectedBalance = new Prisma.Decimal(customer.currentBalance.toString()).plus(dueAmount);
+              if (projectedBalance.gt(customer.creditLimit)) {
+                const over = projectedBalance.minus(customer.creditLimit).toFixed(2);
+                throw AppError.badRequest(
+                  `Credit limit exceeded by ${over}. Limit: ${customer.creditLimit.toFixed(2)}, current balance: ${customer.currentBalance.toFixed(2)}`,
+                  'CREDIT_LIMIT_EXCEEDED',
+                );
+              }
+            }
             const prevBalance = new Prisma.Decimal(customer.currentBalance.toString());
             const newBalance = prevBalance.plus(dueAmount).toDecimalPlaces(2);
 
