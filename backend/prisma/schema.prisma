@@ -595,6 +595,7 @@ model WastageEntry {
   unit    Unit    @relation(fields: [unitId], references: [id], onDelete: Restrict)
   user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
 
+  @@index([createdAt])
   @@map("wastage_entries")
 }
 
@@ -694,6 +695,9 @@ model SaleInvoice {
   salePayments     SalePayment[]
 
   @@index([invoiceNumber])
+  @@index([createdAt])
+  @@index([saleType])
+  @@index([createdAt, saleType])
   @@map("sale_invoices")
 }
 
@@ -818,6 +822,8 @@ model PurchaseOrder {
   supplierPayments SupplierPayment[]
 
   @@index([poNumber])
+  @@index([createdAt])
+  @@index([status])
   @@map("purchase_orders")
 }
 
