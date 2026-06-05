@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Barcode, Copy } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Barcode, CheckSquare, ClipboardList, Copy } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { inventoryApi } from '../../api/inventory';
@@ -10,16 +10,77 @@ import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
 import { useAppStore } from '../../store/useAppStore';
 import type { RollStatus } from '../../types';
 
-const STATUS_BADGE: Record<RollStatus, { label: string; variant: 'green' | 'yellow' | 'red' | 'gray' | 'blue' | 'purple' }> = {
+const STATUS_BADGE: Record<string, { label: string; variant: 'green' | 'yellow' | 'red' | 'gray' | 'blue' | 'purple' }> = {
   IN_STOCK: { label: 'In Stock', variant: 'green' },
   ALLOCATED: { label: 'Allocated', variant: 'blue' },
   SOLD: { label: 'Sold', variant: 'gray' },
   WASTED: { label: 'Wasted', variant: 'yellow' },
   DAMAGED: { label: 'Damaged', variant: 'red' },
+  FINISHED: { label: 'Finished', variant: 'purple' },
+};
+
+const RECON_BADGE: Record<string, { label: string; variant: 'green' | 'red' | 'yellow' | 'blue' }> = {
+  MATCHED: { label: 'Matched', variant: 'green' },
+  SHRINKAGE: { label: 'Shrinkage', variant: 'red' },
+  EXCESS: { label: 'Excess', variant: 'yellow' },
+  REMNANT: { label: 'Remnant Created', variant: 'blue' },
 };
 
 function fmt(n: string | number, currency = GLOBAL_SALE_CURRENCY) {
   return formatAmount(n, currency);
+}
+
+function MarkFinishedModal({ rollId, onClose }: { rollId: string; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const { showNotification } = useAppStore();
+  const [reason, setReason] = useState('');
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: () => rollsApi.markFinished(rollId, { reason }),
+    onSuccess: () => {
+      showNotification('Roll marked as finished', 'success');
+      queryClient.invalidateQueries({ queryKey: ['roll', rollId] });
+      onClose();
+    },
+    onError: (err: any) => {
+      showNotification(err?.response?.data?.message ?? 'Failed to mark roll as finished', 'error');
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+        <h2 className="font-semibold text-gray-900">Mark Roll as Finished</h2>
+        <p className="text-sm text-gray-500">
+          This will formally close the roll. Any remaining stock will be written off and an audit log will be created.
+        </p>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+            Reason <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+            placeholder="Why is this roll being closed?"
+          />
+        </div>
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+            Cancel
+          </button>
+          <button
+            onClick={() => mutate()}
+            disabled={isPending || !reason.trim()}
+            className="px-5 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+          >
+            {isPending ? 'Saving…' : 'Mark Finished'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function RollDetailPage() {
@@ -27,6 +88,8 @@ export default function RollDetailPage() {
   const navigate = useNavigate();
   const { showNotification } = useAppStore();
   const [movPage, setMovPage] = useState(1);
+  const [reconPage, setReconPage] = useState(1);
+  const [showMarkFinished, setShowMarkFinished] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['roll', id],
@@ -40,9 +103,17 @@ export default function RollDetailPage() {
     enabled: !!id,
   });
 
+  const { data: reconData, isLoading: reconLoading } = useQuery({
+    queryKey: ['roll-reconciliations', id, reconPage],
+    queryFn: () => rollsApi.getReconciliations(id!, { page: reconPage, limit: 10 }),
+    enabled: !!id,
+  });
+
   const roll = data?.data;
   const movements = movData?.data ?? [];
   const movMeta = movData?.meta;
+  const reconciliations = reconData?.data ?? [];
+  const reconMeta = reconData?.meta;
 
   const copyBarcode = () => {
     if (roll?.barcode) {
@@ -64,13 +135,19 @@ export default function RollDetailPage() {
     );
   }
 
-  const status = STATUS_BADGE[roll.status];
+  const status = STATUS_BADGE[roll.status] ?? { label: roll.status, variant: 'gray' as const };
   const purchaseRef = roll.purchaseRolls?.[0];
   const buyCurrency = purchaseRef?.purchaseOrder.purchaseCurrencyCode ?? GLOBAL_SALE_CURRENCY;
   const isForeignBuy = buyCurrency !== GLOBAL_SALE_CURRENCY;
+  const canReconcile = roll.status !== 'SOLD' && roll.status !== 'FINISHED';
+  const canFinish = roll.status !== 'SOLD' && roll.status !== 'FINISHED';
 
   return (
     <div className="space-y-6 max-w-4xl">
+      {showMarkFinished && (
+        <MarkFinishedModal rollId={id!} onClose={() => setShowMarkFinished(false)} />
+      )}
+
       <div className="flex items-center gap-4">
         <button onClick={() => navigate('/inventory/rolls')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500">
           <ArrowLeft className="w-5 h-5" />
@@ -81,6 +158,25 @@ export default function RollDetailPage() {
             <Badge variant={status.variant}>{status.label}</Badge>
           </div>
           <p className="text-sm text-gray-500 mt-0.5">{roll.product?.name}</p>
+        </div>
+        {/* Action buttons */}
+        <div className="flex items-center gap-2">
+          {canReconcile && (
+            <button
+              onClick={() => navigate(`/inventory/rolls/${id}/reconcile`)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100"
+            >
+              <ClipboardList className="w-4 h-4" /> Reconcile
+            </button>
+          )}
+          {canFinish && (
+            <button
+              onClick={() => setShowMarkFinished(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100"
+            >
+              <CheckSquare className="w-4 h-4" /> Mark Finished
+            </button>
+          )}
         </div>
       </div>
 
@@ -179,6 +275,63 @@ export default function RollDetailPage() {
         )}
       </div>
 
+      {/* Reconciliation history */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+            <ClipboardList className="w-4 h-4" /> Reconciliation History
+          </h2>
+          {reconMeta && <span className="text-xs text-gray-400">{reconMeta.total} records</span>}
+        </div>
+        {reconLoading ? (
+          <div className="p-6 text-center text-gray-500 text-sm">Loading…</div>
+        ) : reconciliations.length === 0 ? (
+          <div className="p-6 text-center text-gray-500 text-sm">No reconciliations recorded</div>
+        ) : (
+          <>
+            <table className="w-full text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                <tr>
+                  <th className="px-4 py-3 text-left">Result</th>
+                  <th className="px-4 py-3 text-right">Expected</th>
+                  <th className="px-4 py-3 text-right">Actual</th>
+                  <th className="px-4 py-3 text-right">Diff</th>
+                  <th className="px-4 py-3 text-left">Reason</th>
+                  <th className="px-4 py-3 text-left">By</th>
+                  <th className="px-4 py-3 text-left">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {reconciliations.map((r: any) => {
+                  const rb = RECON_BADGE[r.reconciliationResult] ?? { label: r.reconciliationResult, variant: 'gray' as const };
+                  const diff = parseFloat(r.discrepancy);
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <Badge variant={rb.variant}>{rb.label}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-gray-700">{parseFloat(r.expectedLength).toFixed(2)} yd</td>
+                      <td className="px-4 py-3 text-right font-mono text-gray-700">{parseFloat(r.actualLength).toFixed(2)} yd</td>
+                      <td className={`px-4 py-3 text-right font-mono font-semibold ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
+                        {diff > 0 ? '+' : ''}{diff.toFixed(2)} yd
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 text-xs max-w-xs truncate">{r.reason}</td>
+                      <td className="px-4 py-3 text-gray-600 text-xs">{r.user?.username}</td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">{new Date(r.createdAt).toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {reconMeta && reconMeta.totalPages > 1 && (
+              <div className="px-4 border-t border-gray-200">
+                <Pagination page={reconPage} totalPages={reconMeta.totalPages} total={reconMeta.total} limit={reconMeta.limit} onPageChange={setReconPage} />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       {/* Inventory movements */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
@@ -202,7 +355,7 @@ export default function RollDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {movements.map((m) => (
+                {movements.map((m: any) => (
                   <tr key={m.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-700">{m.movementType}</td>
                     <td className="px-4 py-3">

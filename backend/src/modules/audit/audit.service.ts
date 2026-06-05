@@ -1,33 +1,29 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
 export class AuditService {
-  private readonly logger = new Logger(AuditService.name);
+  constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Logs a user or system action (placeholder)
-   */
-  async logAction(userId: string, action: string, details: any = null): Promise<void> {
-    const timestamp = new Date().toISOString();
-    this.logger.log(
-      `[AUDIT LOG] [${timestamp}] User: ${userId} | Action: ${action} | Details: ${JSON.stringify(details)}`,
-    );
-    // Future: Save audit log to database
-  }
-
-  /**
-   * Retrieves audit logs (placeholder)
-   */
-  async getLogs(userId?: string, action?: string): Promise<any[]> {
-    this.logger.log(`[AUDIT LOGS RETRIEVAL] Fetching logs filters - User: ${userId}, Action: ${action}`);
-    return [
-      {
-        id: 'placeholder-audit-1',
-        userId: userId || 'system',
-        action: action || 'SYSTEM_STARTUP',
-        details: { status: 'healthy' },
-        timestamp: new Date().toISOString(),
+  async log(params: {
+    userId: string;
+    action: string;
+    tableName: string;
+    recordId: string;
+    oldValues?: Record<string, unknown>;
+    newValues?: Record<string, unknown>;
+    ipAddress?: string;
+  }): Promise<void> {
+    await this.prisma.auditLog.create({
+      data: {
+        userId: params.userId,
+        action: params.action,
+        tableName: params.tableName,
+        recordId: params.recordId,
+        oldValues: params.oldValues ? JSON.stringify(params.oldValues) : null,
+        newValues: params.newValues ? JSON.stringify(params.newValues) : null,
+        ipAddress: params.ipAddress,
       },
-    ];
+    });
   }
 }

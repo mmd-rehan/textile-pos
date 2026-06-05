@@ -74,7 +74,7 @@ export class InventoryService {
     });
 
     const summary = products.map((p) => {
-      const rollCounts = { IN_STOCK: 0, ALLOCATED: 0, SOLD: 0, WASTED: 0, DAMAGED: 0 };
+      const rollCounts = { IN_STOCK: 0, ALLOCATED: 0, SOLD: 0, WASTED: 0, DAMAGED: 0, FINISHED: 0 };
       let totalOriginalYard = 0;
       let totalRemainingYard = 0;
       let totalQuantityOnHand = 0;

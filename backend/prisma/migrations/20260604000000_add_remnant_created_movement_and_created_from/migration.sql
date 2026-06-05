@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE `inventory_movements` MODIFY `movement_type` ENUM('PURCHASE', 'SALE', 'ADJUSTMENT', 'WASTAGE', 'RECONCILIATION', 'RETURN', 'REMNANT_CREATED') NOT NULL;
+
+-- AlterTable
+ALTER TABLE `remnants` ADD COLUMN `created_from` VARCHAR(191) NOT NULL DEFAULT 'MANUAL';

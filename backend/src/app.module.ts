@@ -15,6 +15,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { ProductsModule } from './modules/products/products.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
+import { RemnantsModule } from './modules/remnants/remnants.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { RollsModule } from './modules/rolls/rolls.module';
 import { SalesModule } from './modules/sales/sales.module';
@@ -22,6 +23,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { UnitsModule } from './modules/units/units.module';
 import { UsersModule } from './modules/users/users.module';
+import { WastageModule } from './modules/wastage/wastage.module';
 
 @Module({
   imports: [
@@ -49,6 +51,8 @@ import { UsersModule } from './modules/users/users.module';
     InventoryModule,
     CustomersModule,
     SalesModule,
+    WastageModule,
+    RemnantsModule,
   ],
 })
 export class AppModule implements NestModule {

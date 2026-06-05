@@ -197,7 +197,7 @@ export interface Supplier {
   _count?: { purchaseOrders: number };
 }
 
-export type RollStatus = 'IN_STOCK' | 'ALLOCATED' | 'SOLD' | 'WASTED' | 'DAMAGED';
+export type RollStatus = 'IN_STOCK' | 'ALLOCATED' | 'SOLD' | 'WASTED' | 'DAMAGED' | 'FINISHED';
 export type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'PARTIALLY_PAID' | 'UNPAID' | 'CANCELLED';
 
 export interface Roll {
@@ -333,11 +333,17 @@ export interface CreateBatchForm {
 // ── Inventory (Milestone 6) ───────────────────────────────────────────────────
 
 export type MovementType =
+  | 'PURCHASE'
+  | 'SALE'
+  | 'ADJUSTMENT'
+  | 'WASTAGE'
+  | 'RECONCILIATION'
+  | 'RETURN'
+  | 'REMNANT_CREATED'
   | 'PURCHASE_IN'
   | 'SALE_OUT'
   | 'ADJUSTMENT_IN'
   | 'ADJUSTMENT_OUT'
-  | 'WASTAGE'
   | 'TRANSFER_IN'
   | 'TRANSFER_OUT'
   | 'RETURN_IN'

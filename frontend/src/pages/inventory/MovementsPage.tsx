@@ -19,11 +19,17 @@ const MOVEMENT_TYPES: MovementType[] = [
 ];
 
 const TYPE_LABELS: Record<MovementType, string> = {
+  PURCHASE: 'Purchase',
+  SALE: 'Sale',
+  ADJUSTMENT: 'Adjustment',
+  WASTAGE: 'Wastage',
+  RECONCILIATION: 'Reconciliation',
+  RETURN: 'Return',
+  REMNANT_CREATED: 'Remnant Created',
   PURCHASE_IN: 'Purchase In',
   SALE_OUT: 'Sale Out',
   ADJUSTMENT_IN: 'Adjustment In',
   ADJUSTMENT_OUT: 'Adjustment Out',
-  WASTAGE: 'Wastage',
   TRANSFER_IN: 'Transfer In',
   TRANSFER_OUT: 'Transfer Out',
   RETURN_IN: 'Return In',
