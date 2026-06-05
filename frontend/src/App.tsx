@@ -25,6 +25,7 @@ import RollDetailPage from './pages/inventory/RollDetailPage';
 import RollListPage from './pages/inventory/RollListPage';
 import WastageListPage from './pages/inventory/WastageListPage';
 import RetailPOSPage from './pages/pos/RetailPOSPage';
+import WholesalePOSPage from './pages/pos/WholesalePOSPage';
 import PurchaseCreatePage from './pages/purchases/PurchaseCreatePage';
 import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
 import PurchaseListPage from './pages/purchases/PurchaseListPage';
@@ -50,6 +51,14 @@ function App() {
             element={
               <ProtectedRoute permission="write:sales">
                 <RetailPOSPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="pos/wholesale"
+            element={
+              <ProtectedRoute permission="write:sales">
+                <WholesalePOSPage />
               </ProtectedRoute>
             }
           />
