@@ -24,6 +24,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { UnitsModule } from './modules/units/units.module';
 import { UsersModule } from './modules/users/users.module';
 import { WastageModule } from './modules/wastage/wastage.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { WastageModule } from './modules/wastage/wastage.module';
     SalesModule,
     WastageModule,
     RemnantsModule,
+    ReportsModule,
   ],
 })
 export class AppModule implements NestModule {

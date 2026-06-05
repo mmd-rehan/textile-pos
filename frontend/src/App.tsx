@@ -26,6 +26,11 @@ import RollListPage from './pages/inventory/RollListPage';
 import WastageListPage from './pages/inventory/WastageListPage';
 import RetailPOSPage from './pages/pos/RetailPOSPage';
 import WholesalePOSPage from './pages/pos/WholesalePOSPage';
+import CustomersReportPage from './pages/reports/CustomersReportPage';
+import InventoryReportPage from './pages/reports/InventoryReportPage';
+import PurchasesReportPage from './pages/reports/PurchasesReportPage';
+import SalesReportPage from './pages/reports/SalesReportPage';
+import WastageReportPage from './pages/reports/WastageReportPage';
 import PurchaseCreatePage from './pages/purchases/PurchaseCreatePage';
 import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
 import PurchaseListPage from './pages/purchases/PurchaseListPage';
@@ -281,6 +286,48 @@ function App() {
             element={
               <ProtectedRoute permission="read:inventory">
                 <BarcodeLookupPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Reports */}
+          <Route
+            path="reports/sales"
+            element={
+              <ProtectedRoute permission="read:sales">
+                <SalesReportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="reports/inventory"
+            element={
+              <ProtectedRoute permission="read:inventory">
+                <InventoryReportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="reports/wastage"
+            element={
+              <ProtectedRoute permission="read:inventory">
+                <WastageReportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="reports/customers"
+            element={
+              <ProtectedRoute permission="read:sales">
+                <CustomersReportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="reports/purchases"
+            element={
+              <ProtectedRoute permission="read:purchases">
+                <PurchasesReportPage />
               </ProtectedRoute>
             }
           />

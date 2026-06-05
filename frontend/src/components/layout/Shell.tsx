@@ -1,9 +1,11 @@
 import {
   Archive,
   Award,
+  BarChart2,
   Barcode,
   Bell,
   ChevronDown,
+  CreditCard,
   History,
   Layers,
   LayoutDashboard,
@@ -17,6 +19,7 @@ import {
   ShoppingCart,
   Tag,
   Trash2,
+  TrendingUp,
   Truck,
   User,
   Users,
@@ -60,6 +63,14 @@ const inventoryLinks: NavItem[] = [
   { name: 'Barcode Lookup', href: '/inventory/barcode-lookup', icon: Barcode, permission: 'read:inventory' },
 ];
 
+const reportLinks: NavItem[] = [
+  { name: 'Sales', href: '/reports/sales', icon: BarChart2, permission: 'read:sales' },
+  { name: 'Inventory', href: '/reports/inventory', icon: Package, permission: 'read:inventory' },
+  { name: 'Wastage', href: '/reports/wastage', icon: Trash2, permission: 'read:inventory' },
+  { name: 'Customers', href: '/reports/customers', icon: CreditCard, permission: 'read:sales' },
+  { name: 'Purchases', href: '/reports/purchases', icon: TrendingUp, permission: 'read:purchases' },
+];
+
 const catalogLinks: NavItem[] = [
   { name: 'Products', href: '/catalog/products', icon: Tag, permission: 'read:products' },
   { name: 'Categories', href: '/catalog/categories', icon: Layers, permission: 'read:products' },
@@ -78,11 +89,13 @@ export default function Shell() {
   const [purchasesOpen, setPurchasesOpen] = useState(location.pathname.startsWith('/purchases'));
   const [inventoryOpen, setInventoryOpen] = useState(location.pathname.startsWith('/inventory'));
   const [customersOpen, setCustomersOpen] = useState(location.pathname.startsWith('/customers'));
+  const [reportsOpen, setReportsOpen] = useState(location.pathname.startsWith('/reports'));
 
   const isCatalog = location.pathname.startsWith('/catalog');
   const isPurchases = location.pathname.startsWith('/purchases');
   const isInventory = location.pathname.startsWith('/inventory');
   const isCustomers = location.pathname.startsWith('/customers');
+  const isReports = location.pathname.startsWith('/reports');
 
   const permissions = user?.permissions ?? [];
   const can = (p: string) => permissions.includes(p);
@@ -92,10 +105,12 @@ export default function Shell() {
   const visiblePurchases = purchaseLinks.filter((item) => !item.permission || can(item.permission));
   const visibleInventory = inventoryLinks.filter((item) => !item.permission || can(item.permission));
   const visibleCatalog = catalogLinks.filter((item) => !item.permission || can(item.permission));
+  const visibleReports = reportLinks.filter((item) => !item.permission || can(item.permission));
   const showCustomersSection = visibleCustomers.length > 0;
   const showPurchasesSection = visiblePurchases.length > 0;
   const showInventorySection = visibleInventory.length > 0;
   const showCatalogSection = visibleCatalog.length > 0;
+  const showReportsSection = visibleReports.length > 0;
 
   const handleLogout = async () => {
     try {
@@ -332,6 +347,58 @@ export default function Shell() {
               {sidebarOpen && catalogOpen && (
                 <div className="ml-8 mt-1 space-y-0.5">
                   {visibleCatalog.map((item) => {
+                    const isActive = location.pathname === item.href;
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive
+                          ? 'text-primary-600 bg-primary-50'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Reports section */}
+          {showReportsSection && (
+            <div className="pt-2">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => setReportsOpen((o) => !o)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-colors ${isReports
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <BarChart2 className="w-5 h-5 shrink-0" />
+                    <span>Reports</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${reportsOpen ? 'rotate-180' : ''}`} />
+                </button>
+              ) : (
+                <Link
+                  to="/reports/sales"
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg font-medium transition-colors w-full ${isReports
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                >
+                  <BarChart2 className="w-5 h-5 shrink-0" />
+                </Link>
+              )}
+              {sidebarOpen && reportsOpen && (
+                <div className="ml-8 mt-1 space-y-0.5">
+                  {visibleReports.map((item) => {
                     const isActive = location.pathname === item.href;
                     const Icon = item.icon;
                     return (
