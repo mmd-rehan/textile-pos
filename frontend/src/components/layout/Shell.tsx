@@ -11,10 +11,12 @@ import {
   Menu,
   Package,
   Palette,
+  Scissors,
   ScrollText,
   Shapes,
   ShoppingCart,
   Tag,
+  Trash2,
   Truck,
   User,
   Users,
@@ -52,6 +54,8 @@ const purchaseLinks: NavItem[] = [
 const inventoryLinks: NavItem[] = [
   { name: 'Rolls', href: '/inventory/rolls', icon: Archive, permission: 'read:inventory' },
   { name: 'Movements', href: '/inventory/movements', icon: Truck, permission: 'read:inventory' },
+  { name: 'Wastage', href: '/inventory/wastage', icon: Trash2, permission: 'read:inventory' },
+  { name: 'Remnants', href: '/inventory/remnants', icon: Scissors, permission: 'read:inventory' },
   { name: 'Barcode Lookup', href: '/inventory/barcode-lookup', icon: Barcode, permission: 'read:inventory' },
 ];
 

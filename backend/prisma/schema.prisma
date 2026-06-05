@@ -35,6 +35,20 @@ enum RollStatus {
   SOLD
   WASTED
   DAMAGED
+  FINISHED
+}
+
+enum ReconciliationResult {
+  MATCHED
+  SHRINKAGE
+  EXCESS
+  REMNANT
+}
+
+enum RemnantStatus {
+  AVAILABLE
+  SOLD
+  DISCARDED
 }
 
 enum SaleType {
@@ -66,6 +80,7 @@ enum MovementType {
   WASTAGE
   RECONCILIATION
   RETURN
+  REMNANT_CREATED
 }
 
 enum MovementDirection {
@@ -363,6 +378,7 @@ model Product {
   stockAdjustments   StockAdjustment[]
   wastageEntries     WastageEntry[]
   productStockItems  ProductStockItem[]
+  remnants           Remnant[]
 
   @@index([barcode])
   @@index([productCode])
@@ -446,6 +462,7 @@ model Batch {
 
   supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   rolls    Roll[]
+  remnants Remnant[]
 
   @@map("batches")
 }
@@ -582,34 +599,49 @@ model WastageEntry {
 }
 
 model RollReconciliation {
-  id             String   @id @default(uuid())
-  rollId         String   @map("roll_id")
-  expectedLength Decimal  @db.Decimal(12, 4) @map("expected_length")
-  actualLength   Decimal  @db.Decimal(12, 4) @map("actual_length")
-  discrepancy    Decimal  @db.Decimal(12, 4)
-  remarks        String?  @db.Text
-  userId         String   @map("user_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id                   String                @id @default(uuid())
+  rollId               String                @map("roll_id")
+  expectedLength       Decimal               @db.Decimal(12, 4) @map("expected_length")
+  actualLength         Decimal               @db.Decimal(12, 4) @map("actual_length")
+  discrepancy          Decimal               @db.Decimal(12, 4)
+  reconciliationResult ReconciliationResult  @map("reconciliation_result")
+  reason               String                @db.Text
+  remarks              String?               @db.Text
+  userId               String                @map("user_id")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
 
-  roll Roll @relation(fields: [rollId], references: [id], onDelete: Restrict)
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roll    Roll     @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  remnant Remnant?
 
   @@map("roll_reconciliations")
 }
 
 model Remnant {
-  id            String   @id @default(uuid())
-  rollId        String   @map("roll_id")
-  remnantRollId String?  @unique @map("remnant_roll_id")
-  lengthYard    Decimal  @db.Decimal(12, 4) @map("length_yard")
-  reason        String   @db.Text
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id                 String        @id @default(uuid())
+  rollId             String        @map("roll_id")
+  remnantRollId      String?       @unique @map("remnant_roll_id")
+  reconciliationId   String?       @unique @map("reconciliation_id")
+  productId          String        @map("product_id")
+  batchId            String?       @map("batch_id")
+  lengthYard         Decimal       @db.Decimal(12, 4) @map("length_yard")
+  barcode            String?       @unique
+  salePrice          Decimal?      @db.Decimal(12, 2) @map("sale_price")
+  status             RemnantStatus @default(AVAILABLE)
+  createdFrom        String        @default("MANUAL") @map("created_from")
+  reason             String        @db.Text
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
 
-  originalRoll Roll  @relation("OriginalRollRemnants", fields: [rollId], references: [id], onDelete: Restrict)
-  remnantRoll  Roll? @relation("NewRollRemnant", fields: [remnantRollId], references: [id], onDelete: SetNull)
+  originalRoll   Roll               @relation("OriginalRollRemnants", fields: [rollId], references: [id], onDelete: Restrict)
+  remnantRoll    Roll?              @relation("NewRollRemnant", fields: [remnantRollId], references: [id], onDelete: SetNull)
+  reconciliation RollReconciliation? @relation(fields: [reconciliationId], references: [id], onDelete: SetNull)
+  product        Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batch          Batch?             @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
+  @@index([rollId])
+  @@index([productId])
   @@map("remnants")
 }
 

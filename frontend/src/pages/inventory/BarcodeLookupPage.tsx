@@ -12,6 +12,7 @@ const STATUS_BADGE: Record<RollStatus, { label: string; variant: 'green' | 'yell
   SOLD: { label: 'Sold', variant: 'gray' },
   WASTED: { label: 'Wasted', variant: 'yellow' },
   DAMAGED: { label: 'Damaged', variant: 'red' },
+  FINISHED: { label: 'Finished', variant: 'purple' },
 };
 
 export default function BarcodeLookupPage() {

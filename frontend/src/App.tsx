@@ -19,8 +19,11 @@ import CustomerForm from './pages/customers/CustomerForm';
 import CustomersPage from './pages/customers/CustomersPage';
 import BarcodeLookupPage from './pages/inventory/BarcodeLookupPage';
 import MovementsPage from './pages/inventory/MovementsPage';
+import ReconcilePage from './pages/inventory/ReconcilePage';
+import RemnantsListPage from './pages/inventory/RemnantsListPage';
 import RollDetailPage from './pages/inventory/RollDetailPage';
 import RollListPage from './pages/inventory/RollListPage';
+import WastageListPage from './pages/inventory/WastageListPage';
 import RetailPOSPage from './pages/pos/RetailPOSPage';
 import PurchaseCreatePage from './pages/purchases/PurchaseCreatePage';
 import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
@@ -229,6 +232,30 @@ function App() {
             element={
               <ProtectedRoute permission="read:inventory">
                 <RollDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="inventory/rolls/:id/reconcile"
+            element={
+              <ProtectedRoute permission="write:inventory">
+                <ReconcilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="inventory/wastage"
+            element={
+              <ProtectedRoute permission="read:inventory">
+                <WastageListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="inventory/remnants"
+            element={
+              <ProtectedRoute permission="read:inventory">
+                <RemnantsListPage />
               </ProtectedRoute>
             }
           />
