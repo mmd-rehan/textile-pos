@@ -42,7 +42,7 @@ interface PaymentForm {
 }
 
 export default function PurchaseDetailPage() {
-  const { code: baseCurrencyCode } = useBaseCurrency();
+  const { code: currentBaseCurrencyCode } = useBaseCurrency();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showNotification } = useAppStore();
@@ -108,6 +108,9 @@ export default function PurchaseDetailPage() {
   }
 
   const status = STATUS_BADGE[po.status] ?? STATUS_BADGE.DRAFT;
+  // Use the base currency that was active when this purchase was created, not the current one.
+  // Falls back to current base currency only if the snapshot field is missing (old records).
+  const baseCurrencyCode = po.baseCurrencyCodeAtTime || currentBaseCurrencyCode;
   const isForeign = po.purchaseCurrencyCode !== baseCurrencyCode;
   const buyCcy = getCurrency(po.purchaseCurrencyCode);
   const baseCcy = getCurrency(baseCurrencyCode);

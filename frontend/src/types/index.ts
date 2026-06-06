@@ -272,6 +272,7 @@ export interface PurchaseOrder {
   poNumber: string;
   supplierId: string;
   purchaseCurrencyCode: string;
+  baseCurrencyCodeAtTime: string;
   exchangeRateToBaseCurrency: string;
   subtotalOriginalCurrency: string;
   discountOriginalCurrency: string;

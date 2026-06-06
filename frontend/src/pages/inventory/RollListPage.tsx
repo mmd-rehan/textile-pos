@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { rollsApi } from '../../api/rolls';
 import Badge from '../../components/ui/Badge';
 import Pagination from '../../components/ui/Pagination';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import type { RollStatus } from '../../types';
 
 const STATUS_BADGE: Record<RollStatus, { label: string; variant: 'green' | 'yellow' | 'red' | 'gray' | 'blue' | 'purple' }> = {
@@ -20,6 +22,7 @@ const STATUSES: RollStatus[] = ['IN_STOCK', 'ALLOCATED', 'SOLD', 'WASTED', 'DAMA
 
 export default function RollListPage() {
   const navigate = useNavigate();
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -103,7 +106,7 @@ export default function RollListPage() {
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-gray-500">
                         {roll.salePricePerYard
-                          ? parseFloat(roll.salePricePerYard).toLocaleString('en-PK', { style: 'currency', currency: 'PKR', maximumFractionDigits: 0 })
+                          ? formatAmount(roll.salePricePerYard, baseCurrencyCode)
                           : '—'}
                       </td>
                       <td className="px-4 py-3 text-center">

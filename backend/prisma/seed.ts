@@ -109,24 +109,48 @@ async function main() {
   // ==========================================
   console.log('💱 Seeding currencies...');
   const currencies = [
-    { code: 'PKR', name: 'Pakistani Rupee',  symbol: '₨',   isBaseCurrency: true  },
-    { code: 'AED', name: 'UAE Dirham',       symbol: 'د.إ', isBaseCurrency: false },
-    { code: 'USD', name: 'US Dollar',        symbol: '$',   isBaseCurrency: false },
-    { code: 'EUR', name: 'Euro',             symbol: '€',   isBaseCurrency: false },
-    { code: 'GBP', name: 'British Pound',    symbol: '£',   isBaseCurrency: false },
-    { code: 'SAR', name: 'Saudi Riyal',      symbol: '﷼',  isBaseCurrency: false },
-    { code: 'INR', name: 'Indian Rupee',     symbol: '₹',   isBaseCurrency: false },
-    { code: 'CNY', name: 'Chinese Yuan',     symbol: '¥',   isBaseCurrency: false },
-    { code: 'TRY', name: 'Turkish Lira',     symbol: '₺',   isBaseCurrency: false },
+    { code: 'PKR', name: 'Pakistani Rupee', symbol: '₨',   decimalPlaces: 2, isBaseCurrency: true  },
+    { code: 'AED', name: 'UAE Dirham',      symbol: 'د.إ', decimalPlaces: 2, isBaseCurrency: false },
+    { code: 'USD', name: 'US Dollar',       symbol: '$',   decimalPlaces: 2, isBaseCurrency: false },
+    { code: 'EUR', name: 'Euro',            symbol: '€',   decimalPlaces: 2, isBaseCurrency: false },
+    { code: 'GBP', name: 'British Pound',   symbol: '£',   decimalPlaces: 2, isBaseCurrency: false },
+    { code: 'SAR', name: 'Saudi Riyal',     symbol: '﷼',  decimalPlaces: 2, isBaseCurrency: false },
+    { code: 'INR', name: 'Indian Rupee',    symbol: '₹',   decimalPlaces: 2, isBaseCurrency: false },
+    { code: 'CNY', name: 'Chinese Yuan',    symbol: '¥',   decimalPlaces: 2, isBaseCurrency: false },
+    { code: 'TRY', name: 'Turkish Lira',    symbol: '₺',   decimalPlaces: 2, isBaseCurrency: false },
   ];
   for (const c of currencies) {
     await prisma.currency.upsert({
       where: { code: c.code },
-      update: { name: c.name, symbol: c.symbol, isBaseCurrency: c.isBaseCurrency },
+      // Only update metadata — never reset isBaseCurrency (admin may have changed it)
+      update: { name: c.name, symbol: c.symbol, decimalPlaces: c.decimalPlaces },
       create: c,
     });
   }
-  console.log(`✅ Seeded ${currencies.length} currencies (base: PKR).`);
+  console.log(`✅ Seeded ${currencies.length} currencies.`);
+
+  // Seed self-rates (1:1) for each currency so exchange-rate lookups always have a fallback.
+  // Only create if no rate exists for that pair — never overwrite admin-entered rates.
+  console.log('📈 Seeding self-rates...');
+  let selfRateCount = 0;
+  for (const c of currencies) {
+    const existing = await prisma.currencyExchangeRate.findFirst({
+      where: { fromCurrencyCode: c.code, toCurrencyCode: c.code },
+    });
+    if (!existing) {
+      await prisma.currencyExchangeRate.create({
+        data: {
+          fromCurrencyCode: c.code,
+          toCurrencyCode: c.code,
+          rate: 1,
+          isCurrent: true,
+          notes: 'Self-rate seeded automatically',
+        },
+      });
+      selfRateCount++;
+    }
+  }
+  console.log(`✅ Seeded ${selfRateCount} new self-rates (${currencies.length - selfRateCount} already existed).`);
 
   // ==========================================
   // 5. SEED MEASUREMENT UNITS
@@ -190,11 +214,12 @@ async function main() {
   for (const s of companySettings) {
     await prisma.companySetting.upsert({
       where: { key: s.key },
-      update: { value: s.value, description: s.description },
+      // Only update description — never reset values (admin may have changed them)
+      update: { description: s.description },
       create: s,
     });
   }
-  console.log(`✅ Seeded ${companySettings.length} company settings.`);
+  console.log(`✅ Seeded ${companySettings.length} company settings (values preserved if already set).`);
 
   // ==========================================
   // 8. SEED DEFAULT USERS

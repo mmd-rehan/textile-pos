@@ -78,11 +78,37 @@ docker compose -f docker/docker-compose.yml up -d
 ```
 
 ### 3. Initialize Database and Run Prisma Migrations
-Generate the Prisma client and push the schema to the MySQL instance:
+
+#### Local Development
+Run migrations and seed the database using the following commands from the `backend/` directory:
+
 ```bash
-# Run Prisma migrations to initialize the database
-npm run prisma:migrate --workspace=backend
+# Generate the Prisma client (required after any schema change)
+npx prisma generate
+
+# Apply all pending migrations and update the database schema
+npx prisma migrate dev
+
+# Seed the database with default roles, currencies, units, and sample data
+npx prisma db seed
 ```
+
+Or from the repo root using npm workspaces:
+```bash
+npm run prisma:generate --workspace=backend
+npm run prisma:migrate --workspace=backend   # runs prisma migrate dev
+npx prisma db seed --schema=backend/prisma/schema.prisma
+```
+
+#### Production / Staging
+Use `migrate deploy` — it applies only committed migration files and **never prompts or resets**:
+```bash
+# Inside the backend/ directory (or set --schema flag from root)
+npx prisma migrate deploy
+npx prisma generate
+```
+
+> **Important:** `prisma db push` is only for temporary local schema experiments. **Never use `db push` on a shared, staging, or production database.** It bypasses the migration history and can silently destroy data. Always create a proper migration with `prisma migrate dev` and commit the generated SQL file before deploying.
 
 ### 4. Start the Application
 Launch both the frontend client and NestJS backend concurrently in development mode:
