@@ -6,7 +6,8 @@ import { purchasesApi } from '../../api/purchases';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Pagination from '../../components/ui/Pagination';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import type { InvoiceStatus } from '../../types';
 
 const STATUS_BADGE: Record<InvoiceStatus, { label: string; variant: 'green' | 'yellow' | 'red' | 'gray' | 'blue' | 'purple' }> = {
@@ -19,6 +20,7 @@ const STATUS_BADGE: Record<InvoiceStatus, { label: string; variant: 'green' | 'y
 };
 
 export default function PurchaseListPage() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -89,7 +91,7 @@ export default function PurchaseListPage() {
                       <td className="px-4 py-3 text-gray-500">{new Date(po.orderDate).toLocaleDateString()}</td>
                       <td className="px-4 py-3 text-right font-mono text-gray-700">
                         <span>{formatAmount(po.totalOriginalCurrency, po.purchaseCurrencyCode)}</span>
-                        {po.purchaseCurrencyCode !== GLOBAL_SALE_CURRENCY && (
+                        {po.purchaseCurrencyCode !== baseCurrencyCode && (
                           <span className="ml-1.5 text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{po.purchaseCurrencyCode}</span>
                         )}
                       </td>

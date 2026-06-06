@@ -35,7 +35,11 @@ export const CURRENCIES: Currency[] = [
   { code: 'NGN', name: 'Nigerian Naira',       symbol: '₦'    },
 ];
 
-/** The single currency used for all sales in this shop. */
+/**
+ * @deprecated Use `useBaseCurrency()` hook in components instead.
+ * This constant is kept only as a static fallback for non-hook contexts.
+ * The live base currency is stored in company settings (company_currency key).
+ */
 export const GLOBAL_SALE_CURRENCY = 'PKR';
 
 const CURRENCY_MAP = new Map(CURRENCIES.map((c) => [c.code, c]));

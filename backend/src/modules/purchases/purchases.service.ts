@@ -7,7 +7,7 @@ import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { CreateSupplierPaymentDto } from './dto/create-supplier-payment.dto';
 import { QueryPurchaseDto } from './dto/query-purchase.dto';
 
-export const BASE_CURRENCY_CODE = 'PKR';
+const FALLBACK_BASE_CURRENCY = 'PKR';
 
 const PO_INCLUDE = {
   supplier: { select: { id: true, name: true, contactName: true } },
@@ -111,9 +111,13 @@ export class PurchasesService {
       const supplier = await tx.supplier.findUnique({ where: { id: dto.supplierId } });
       if (!supplier) throw AppError.notFound('Supplier not found', 'SUPPLIER_NOT_FOUND');
 
+      // ── Resolve base currency from settings ───────────────────────────────
+      const baseCurrencySetting = await tx.companySetting.findUnique({ where: { key: 'company_currency' } });
+      const baseCurrencyCode = baseCurrencySetting?.value ?? FALLBACK_BASE_CURRENCY;
+
       // ── Currency / exchange rate resolution ──────────────────────────────
-      const currencyCode = dto.currency ?? BASE_CURRENCY_CODE;
-      const isBaseCurrency = currencyCode === BASE_CURRENCY_CODE;
+      const currencyCode = dto.currency ?? baseCurrencyCode;
+      const isBaseCurrency = currencyCode === baseCurrencyCode;
       const exchangeRate = isBaseCurrency
         ? new Prisma.Decimal(1)
         : new Prisma.Decimal(dto.exchangeRateToBaseCurrency ?? 1);
@@ -277,6 +281,7 @@ export class PurchasesService {
           poNumber,
           supplierId: dto.supplierId,
           purchaseCurrencyCode: currencyCode,
+          baseCurrencyCodeAtTime: baseCurrencyCode,
           exchangeRateToBaseCurrency: exchangeRate,
           subtotalOriginalCurrency: subtotalOriginal,
           totalOriginalCurrency: totalOriginal,
@@ -504,6 +509,7 @@ export class PurchasesService {
           data: {
             supplierId: dto.supplierId,
             currencyCode,
+            baseCurrencyCodeAtTime: baseCurrencyCode,
             debitOriginalCurrency: new Prisma.Decimal(0),
             creditOriginalCurrency: payableOriginal.toDecimalPlaces(2),
             exchangeRateToBaseCurrency: exchangeRate,
@@ -581,6 +587,9 @@ export class PurchasesService {
       const exchangeRate = new Prisma.Decimal(po.exchangeRateToBaseCurrency.toString());
       const amountBase = paymentAmount.times(exchangeRate).toDecimalPlaces(2);
 
+      const paymentBaseCurrency = await tx.companySetting.findUnique({ where: { key: 'company_currency' } });
+      const paymentBaseCurrencyCode = paymentBaseCurrency?.value ?? FALLBACK_BASE_CURRENCY;
+
       await tx.supplierPayment.create({
         data: {
           purchaseOrderId: purchaseId,
@@ -588,6 +597,7 @@ export class PurchasesService {
           amountOriginalCurrency: paymentAmount.toDecimalPlaces(2),
           amountBaseCurrency: amountBase,
           currencyCode: po.purchaseCurrencyCode,
+          baseCurrencyCodeAtTime: paymentBaseCurrencyCode,
           exchangeRateToBaseCurrency: exchangeRate,
           paymentMethod: dto.paymentMethod,
           paymentDate: new Date(dto.paymentDate),
@@ -619,6 +629,7 @@ export class PurchasesService {
         data: {
           supplierId: po.supplierId,
           currencyCode: po.purchaseCurrencyCode,
+          baseCurrencyCodeAtTime: paymentBaseCurrencyCode,
           debitOriginalCurrency: paymentAmount.toDecimalPlaces(2),
           creditOriginalCurrency: new Prisma.Decimal(0),
           exchangeRateToBaseCurrency: exchangeRate,

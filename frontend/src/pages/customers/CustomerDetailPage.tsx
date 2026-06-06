@@ -16,7 +16,8 @@ import { customersApi } from '../../api/customers';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Pagination from '../../components/ui/Pagination';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { useAppStore } from '../../store/useAppStore';
 import type { CustomerLedgerEntry } from '../../types';
 
@@ -46,6 +47,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function CustomerDetailPage() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -176,7 +178,7 @@ export default function CustomerDetailPage() {
             Outstanding Balance
           </p>
           <p className={`text-2xl font-bold font-mono ${balance > 0 ? (overLimit ? 'text-red-600' : 'text-amber-600') : 'text-green-600'}`}>
-            {formatAmount(c.currentBalance, GLOBAL_SALE_CURRENCY)}
+            {formatAmount(c.currentBalance, baseCurrencyCode)}
           </p>
           {overLimit && (
             <div className="flex items-center gap-1 mt-1.5 text-xs text-red-600 font-medium">
@@ -197,7 +199,7 @@ export default function CustomerDetailPage() {
           {creditLimit !== null ? (
             <>
               <p className="text-2xl font-bold font-mono text-gray-900">
-                {formatAmount(c.creditLimit!, GLOBAL_SALE_CURRENCY)}
+                {formatAmount(c.creditLimit!, baseCurrencyCode)}
               </p>
               <div className="mt-2">
                 <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
@@ -209,7 +211,7 @@ export default function CustomerDetailPage() {
                 <p className="text-xs text-gray-400 mt-1">
                   {creditUsedPct.toFixed(0)}% used
                   {outstanding?.availableCredit && parseFloat(outstanding.availableCredit) > 0 && (
-                    <> — {formatAmount(outstanding.availableCredit, GLOBAL_SALE_CURRENCY)} available</>
+                    <> — {formatAmount(outstanding.availableCredit, baseCurrencyCode)} available</>
                   )}
                 </p>
               </div>
@@ -229,7 +231,7 @@ export default function CustomerDetailPage() {
           </p>
           {outstanding && parseFloat(outstanding.totalOutstandingAmount) > 0 && (
             <p className="text-xs text-gray-500 mt-1">
-              Total due: {formatAmount(outstanding.totalOutstandingAmount, GLOBAL_SALE_CURRENCY)}
+              Total due: {formatAmount(outstanding.totalOutstandingAmount, baseCurrencyCode)}
             </p>
           )}
           {c.address && (
@@ -294,7 +296,7 @@ export default function CustomerDetailPage() {
                         {isDebit ? (
                           <span className="flex items-center justify-end gap-1 text-red-600">
                             <TrendingUp className="w-3.5 h-3.5" />
-                            {formatAmount(entry.debit, GLOBAL_SALE_CURRENCY)}
+                            {formatAmount(entry.debit, baseCurrencyCode)}
                           </span>
                         ) : (
                           <span className="text-gray-300">—</span>
@@ -304,14 +306,14 @@ export default function CustomerDetailPage() {
                         {credit > 0 ? (
                           <span className="flex items-center justify-end gap-1 text-green-600">
                             <TrendingDown className="w-3.5 h-3.5" />
-                            {formatAmount(entry.credit, GLOBAL_SALE_CURRENCY)}
+                            {formatAmount(entry.credit, baseCurrencyCode)}
                           </span>
                         ) : (
                           <span className="text-gray-300">—</span>
                         )}
                       </td>
                       <td className={`px-5 py-3 text-right font-mono font-medium ${parseFloat(entry.balanceAfter) > 0 ? 'text-amber-700' : 'text-gray-600'}`}>
-                        {formatAmount(entry.balanceAfter, GLOBAL_SALE_CURRENCY)}
+                        {formatAmount(entry.balanceAfter, baseCurrencyCode)}
                       </td>
                     </tr>
                   );
@@ -343,7 +345,7 @@ export default function CustomerDetailPage() {
           <p className="text-xs text-gray-500 mb-0.5">Customer</p>
           <p className="font-medium text-gray-900">{c.name}</p>
           <p className="text-sm text-amber-700 font-mono mt-1">
-            Outstanding: {formatAmount(c.currentBalance, GLOBAL_SALE_CURRENCY)}
+            Outstanding: {formatAmount(c.currentBalance, baseCurrencyCode)}
           </p>
         </div>
 

@@ -3,7 +3,8 @@ import { AlertTriangle, Download, BarChart2 } from 'lucide-react';
 import { useState } from 'react';
 import { reportsApi } from '../../api/reports';
 import Pagination from '../../components/ui/Pagination';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 
 type ViewMode = 'invoices' | 'monthly' | 'products';
 
@@ -21,6 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function SalesReportPage() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const [view, setView] = useState<ViewMode>('invoices');
   const [startDate, setStartDate] = useState(monthStart());
   const [endDate, setEndDate] = useState(today());
@@ -142,9 +144,9 @@ export default function SalesReportPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { label: 'Invoices', value: String(invoices.totals.invoiceCount) },
-                { label: 'Net Total', value: formatAmount(invoices.totals.netAmount, GLOBAL_SALE_CURRENCY) },
-                { label: 'Collected', value: formatAmount(invoices.totals.paidAmount, GLOBAL_SALE_CURRENCY) },
-                { label: 'Outstanding', value: formatAmount(invoices.totals.dueAmount, GLOBAL_SALE_CURRENCY) },
+                { label: 'Net Total', value: formatAmount(invoices.totals.netAmount, baseCurrencyCode) },
+                { label: 'Collected', value: formatAmount(invoices.totals.paidAmount, baseCurrencyCode) },
+                { label: 'Outstanding', value: formatAmount(invoices.totals.dueAmount, baseCurrencyCode) },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-white rounded-lg border border-gray-200 px-4 py-3">
                   <p className="text-xs text-gray-500">{label}</p>
@@ -185,9 +187,9 @@ export default function SalesReportPage() {
                               {inv.saleType}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right font-medium text-gray-900">{formatAmount(inv.netAmount, GLOBAL_SALE_CURRENCY)}</td>
-                          <td className="px-4 py-3 text-right text-green-700">{formatAmount(inv.paidAmount, GLOBAL_SALE_CURRENCY)}</td>
-                          <td className="px-4 py-3 text-right text-amber-700">{parseFloat(inv.dueAmount) > 0 ? formatAmount(inv.dueAmount, GLOBAL_SALE_CURRENCY) : '—'}</td>
+                          <td className="px-4 py-3 text-right font-medium text-gray-900">{formatAmount(inv.netAmount, baseCurrencyCode)}</td>
+                          <td className="px-4 py-3 text-right text-green-700">{formatAmount(inv.paidAmount, baseCurrencyCode)}</td>
+                          <td className="px-4 py-3 text-right text-amber-700">{parseFloat(inv.dueAmount) > 0 ? formatAmount(inv.dueAmount, baseCurrencyCode) : '—'}</td>
                           <td className="px-4 py-3">
                             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${STATUS_COLORS[inv.status] ?? 'bg-gray-100 text-gray-500'}`}>
                               {inv.status.replace(/_/g, ' ')}
@@ -236,10 +238,10 @@ export default function SalesReportPage() {
                       {new Date(row.month + '-01').toLocaleDateString('en-PK', { month: 'long', year: 'numeric' })}
                     </td>
                     <td className="px-4 py-3 text-gray-700">{row.invoiceCount}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-900">{formatAmount(row.netAmount, GLOBAL_SALE_CURRENCY)}</td>
-                    <td className="px-4 py-3 text-green-700">{formatAmount(row.paidAmount, GLOBAL_SALE_CURRENCY)}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-900">{formatAmount(row.netAmount, baseCurrencyCode)}</td>
+                    <td className="px-4 py-3 text-green-700">{formatAmount(row.paidAmount, baseCurrencyCode)}</td>
                     <td className="px-4 py-3 text-amber-700">
-                      {parseFloat(row.dueAmount) > 0 ? formatAmount(row.dueAmount, GLOBAL_SALE_CURRENCY) : '—'}
+                      {parseFloat(row.dueAmount) > 0 ? formatAmount(row.dueAmount, baseCurrencyCode) : '—'}
                     </td>
                   </tr>
                 ))}
@@ -283,7 +285,7 @@ export default function SalesReportPage() {
                         <td className="px-4 py-3 text-gray-700">
                           {parseFloat(p.totalQty).toFixed(2)} {p.productType === 'FABRIC_ROLL' ? 'yd' : 'pcs'}
                         </td>
-                        <td className="px-4 py-3 font-semibold text-gray-900">{formatAmount(p.totalRevenue, GLOBAL_SALE_CURRENCY)}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-900">{formatAmount(p.totalRevenue, baseCurrencyCode)}</td>
                       </tr>
                     ))}
                   </tbody>

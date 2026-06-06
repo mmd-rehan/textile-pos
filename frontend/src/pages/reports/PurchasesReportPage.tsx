@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { reportsApi } from '../../api/reports';
 import { suppliersApi } from '../../api/suppliers';
 import Pagination from '../../components/ui/Pagination';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 
 function today() { return new Date().toISOString().slice(0, 10); }
 function monthStart() {
@@ -20,6 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function PurchasesReportPage() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const [startDate, setStartDate] = useState(monthStart());
   const [endDate, setEndDate] = useState(today());
   const [supplierId, setSupplierId] = useState('');
@@ -102,7 +104,7 @@ export default function PurchasesReportPage() {
           </div>
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4">
             <p className="text-sm text-gray-500">Total (Base Currency)</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{formatAmount(data.totals.totalBaseCurrency, GLOBAL_SALE_CURRENCY)}</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{formatAmount(data.totals.totalBaseCurrency, baseCurrencyCode)}</p>
           </div>
         </div>
       )}
@@ -143,7 +145,7 @@ export default function PurchasesReportPage() {
                         {po.purchaseCurrencyCode} {parseFloat(po.totalOriginalCurrency).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 font-semibold text-gray-900">
-                        {formatAmount(po.totalBaseCurrency, GLOBAL_SALE_CURRENCY)}
+                        {formatAmount(po.totalBaseCurrency, baseCurrencyCode)}
                       </td>
                       <td className="px-4 py-3 text-green-700">
                         {po.purchaseCurrencyCode} {parseFloat(po.paidAmountOriginalCurrency).toLocaleString()}

@@ -629,3 +629,53 @@ export interface ReceiptData {
   invoice: SaleInvoice;
   company: { name: string; address: string; phone: string };
 }
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+
+export interface AdminRole {
+  id: string;
+  name: string;
+  description: string | null;
+  permissions: string[];
+  userCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  status: UserStatus;
+  createdAt: string;
+  updatedAt: string;
+  roles: Array<{ id: string; name: string; description: string | null }>;
+}
+
+export interface CompanySettings {
+  company_name?: string;
+  company_address?: string;
+  company_phone?: string;
+  company_email?: string;
+  company_currency?: string;
+  company_timezone?: string;
+  company_tax_rate?: string;
+  company_tax_label?: string;
+}
+
+export interface InvoiceSettings {
+  invoice_prefix?: string;
+  invoice_footer?: string;
+  invoice_show_tax?: string;
+}
+
+export interface MeasurementSettings {
+  default_length_unit?: string;
+  default_weight_unit?: string;
+}
+
+export interface BarcodeSettings {
+  barcode_prefix_roll?: string;
+  barcode_prefix_product?: string;
+  barcode_format?: string;
+}

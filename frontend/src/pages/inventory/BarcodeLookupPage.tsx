@@ -3,7 +3,8 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { inventoryApi } from '../../api/inventory';
 import Badge from '../../components/ui/Badge';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import type { BarcodeLookupResult, RollStatus } from '../../types';
 
 const STATUS_BADGE: Record<RollStatus, { label: string; variant: 'green' | 'yellow' | 'red' | 'gray' | 'blue' | 'purple' }> = {
@@ -16,6 +17,7 @@ const STATUS_BADGE: Record<RollStatus, { label: string; variant: 'green' | 'yell
 };
 
 export default function BarcodeLookupPage() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [barcode, setBarcode] = useState('');
@@ -137,6 +139,7 @@ function RollResult({
   result: BarcodeLookupResult;
   onNavigate: () => void;
 }) {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const roll = result.roll!;
   const status = STATUS_BADGE[roll.status];
 
@@ -184,7 +187,7 @@ function RollResult({
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sale / yd</p>
             <p className="text-base font-bold text-gray-900 mt-0.5 font-mono">
               {roll.salePricePerYard
-                ? formatAmount(roll.salePricePerYard, GLOBAL_SALE_CURRENCY)
+                ? formatAmount(roll.salePricePerYard, baseCurrencyCode)
                 : '—'}
             </p>
           </div>
@@ -236,6 +239,7 @@ function ProductResult({
   result: BarcodeLookupResult;
   onNavigate: (rollId: string) => void;
 }) {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const product = result.product!;
   const isRoll = product.productType === 'FABRIC_ROLL';
 
@@ -256,13 +260,13 @@ function ProductResult({
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Retail Price</p>
             <p className="text-base font-bold text-gray-900 mt-0.5 font-mono">
-              {formatAmount(product.retailPrice, GLOBAL_SALE_CURRENCY)}
+              {formatAmount(product.retailPrice, baseCurrencyCode)}
             </p>
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Wholesale Price</p>
             <p className="text-base font-bold text-gray-900 mt-0.5 font-mono">
-              {formatAmount(product.wholesalePrice, GLOBAL_SALE_CURRENCY)}
+              {formatAmount(product.wholesalePrice, baseCurrencyCode)}
             </p>
           </div>
         </div>
@@ -328,7 +332,7 @@ function ProductResult({
                           {qty.toFixed(0)} {item.unit?.abbreviation ?? 'pc'}
                         </p>
                         {item.salePricePerUnit && (
-                          <p className="text-xs text-gray-500">{formatAmount(item.salePricePerUnit, GLOBAL_SALE_CURRENCY)}/pc</p>
+                          <p className="text-xs text-gray-500">{formatAmount(item.salePricePerUnit, baseCurrencyCode)}/pc</p>
                         )}
                       </div>
                     </div>
@@ -350,6 +354,7 @@ function StockItemResult({
   result: BarcodeLookupResult;
   onNavigate: () => void;
 }) {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const si = result.stockItem!;
   const qty = parseFloat(si.quantityOnHand);
 
@@ -375,7 +380,7 @@ function StockItemResult({
             <div className="bg-gray-50 rounded-lg p-3">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sale Price</p>
               <p className="text-base font-bold text-gray-900 mt-0.5 font-mono">
-                {formatAmount(si.salePricePerUnit, GLOBAL_SALE_CURRENCY)}
+                {formatAmount(si.salePricePerUnit, baseCurrencyCode)}
               </p>
             </div>
           )}

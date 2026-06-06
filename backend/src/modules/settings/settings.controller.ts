@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
-import { SettingsService } from './settings.service';
-import { createSuccessResponse } from '../../common/utils/response';
+import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { createSuccessResponse } from '../../common/utils/response';
+import { SettingsService } from './settings.service';
 
 @Controller('settings')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -19,8 +20,11 @@ export class SettingsController {
 
   @Put('company')
   @RequirePermissions('write:settings')
-  async updateCompanySettings(@Body() body: Record<string, string>) {
-    const data = await this.settingsService.updateCompanySettings(body);
+  async updateCompanySettings(
+    @Body() body: Record<string, string>,
+    @CurrentUser() user: { id: string },
+  ) {
+    const data = await this.settingsService.updateCompanySettings(body, user.id);
     return createSuccessResponse(data);
   }
 
@@ -33,8 +37,29 @@ export class SettingsController {
 
   @Put('app')
   @RequirePermissions('write:settings')
-  async updateAppSettings(@Body() body: Record<string, string>) {
-    const data = await this.settingsService.updateAppSettings(body);
+  async updateAppSettings(
+    @Body() body: Record<string, string>,
+    @CurrentUser() user: { id: string },
+  ) {
+    const data = await this.settingsService.updateAppSettings(body, user.id);
+    return createSuccessResponse(data);
+  }
+
+  @Get('flags')
+  @RequirePermissions('read:settings')
+  async getFeatureFlags() {
+    const data = await this.settingsService.getFeatureFlags();
+    return createSuccessResponse(data);
+  }
+
+  @Put('flags/:name')
+  @RequirePermissions('write:settings')
+  async updateFeatureFlag(
+    @Param('name') name: string,
+    @Body() body: { isEnabled: boolean },
+    @CurrentUser() user: { id: string },
+  ) {
+    const data = await this.settingsService.updateFeatureFlag(name, body.isEnabled, user.id);
     return createSuccessResponse(data);
   }
 }

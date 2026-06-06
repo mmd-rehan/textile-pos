@@ -18,7 +18,8 @@ import { customersApi } from '../../api/customers';
 import { inventoryApi } from '../../api/inventory';
 import { salesApi } from '../../api/sales';
 import Modal from '../../components/ui/Modal';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { useAppStore } from '../../store/useAppStore';
 import type {
   BarcodeLookupResult,
@@ -138,6 +139,7 @@ function getInvoiceTotals(lines: CartLine[], payments: PaymentEntry[]) {
 
 export default function RetailPOSPage() {
   const { showNotification } = useAppStore();
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const barcodeRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -800,7 +802,7 @@ export default function RetailPOSPage() {
                               />
                             </td>
                             <td className="px-4 py-3 text-right font-mono font-medium text-gray-900 whitespace-nowrap">
-                              {formatAmount(v.subTotal, GLOBAL_SALE_CURRENCY)}
+                              {formatAmount(v.subTotal, baseCurrencyCode)}
                             </td>
                             <td className="px-3 py-3">
                               <button
@@ -888,7 +890,7 @@ export default function RetailPOSPage() {
                             />
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-medium text-gray-900 whitespace-nowrap">
-                            {formatAmount(subtotal, GLOBAL_SALE_CURRENCY)}
+                            {formatAmount(subtotal, baseCurrencyCode)}
                           </td>
                           <td className="px-3 py-3">
                             <button
@@ -945,10 +947,10 @@ export default function RetailPOSPage() {
                     <span>
                       Outstanding:{' '}
                       <span className="font-mono font-semibold">
-                        {formatAmount(selectedCustomer.currentBalance, GLOBAL_SALE_CURRENCY)}
+                        {formatAmount(selectedCustomer.currentBalance, baseCurrencyCode)}
                       </span>
                       {selectedCustomer.creditLimit && (
-                        <> / Limit: <span className="font-mono">{formatAmount(selectedCustomer.creditLimit, GLOBAL_SALE_CURRENCY)}</span></>
+                        <> / Limit: <span className="font-mono">{formatAmount(selectedCustomer.creditLimit, baseCurrencyCode)}</span></>
                       )}
                     </span>
                   </div>
@@ -985,7 +987,7 @@ export default function RetailPOSPage() {
                           </div>
                           {parseFloat(c.currentBalance) > 0 && (
                             <span className="text-xs font-mono text-amber-700 shrink-0 ml-2">
-                              {formatAmount(c.currentBalance, GLOBAL_SALE_CURRENCY)}
+                              {formatAmount(c.currentBalance, baseCurrencyCode)}
                             </span>
                           )}
                         </div>
@@ -1044,15 +1046,15 @@ export default function RetailPOSPage() {
             <div className="border-t border-gray-100 pt-3 space-y-1.5">
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Total</span>
-                <span className="font-mono">{formatAmount(netAmount, GLOBAL_SALE_CURRENCY)}</span>
+                <span className="font-mono">{formatAmount(netAmount, baseCurrencyCode)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Paid</span>
-                <span className="font-mono text-green-600">{formatAmount(totalPaid, GLOBAL_SALE_CURRENCY)}</span>
+                <span className="font-mono text-green-600">{formatAmount(totalPaid, baseCurrencyCode)}</span>
               </div>
               <div className={`flex justify-between text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 <span>{due > 0 ? 'Due' : 'Change'}</span>
-                <span className="font-mono">{formatAmount(Math.abs(totalPaid - netAmount), GLOBAL_SALE_CURRENCY)}</span>
+                <span className="font-mono">{formatAmount(Math.abs(totalPaid - netAmount), baseCurrencyCode)}</span>
               </div>
               {due > 0 && (
                 <button
@@ -1144,7 +1146,7 @@ export default function RetailPOSPage() {
                 <div className="text-right">
                   <p className="font-mono text-gray-700">{parseFloat(roll.remainingLengthYard).toFixed(2)} yd</p>
                   {roll.salePricePerYard && (
-                    <p className="text-xs text-gray-500">{formatAmount(roll.salePricePerYard, GLOBAL_SALE_CURRENCY)}/yd</p>
+                    <p className="text-xs text-gray-500">{formatAmount(roll.salePricePerYard, baseCurrencyCode)}/yd</p>
                   )}
                 </div>
               </button>
@@ -1186,7 +1188,7 @@ export default function RetailPOSPage() {
                     {parseFloat(item.quantityOnHand).toFixed(0)} {item.unit?.abbreviation ?? 'pc'}
                   </p>
                   {item.salePricePerUnit && (
-                    <p className="text-xs text-gray-500">{formatAmount(item.salePricePerUnit, GLOBAL_SALE_CURRENCY)}/pc</p>
+                    <p className="text-xs text-gray-500">{formatAmount(item.salePricePerUnit, baseCurrencyCode)}/pc</p>
                   )}
                 </div>
               </button>
@@ -1212,7 +1214,9 @@ export default function RetailPOSPage() {
 // ── Receipt modal ────────────────────────────────────────────────────────────
 
 function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => void }) {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const { invoice, company } = data;
+  const invoiceCurrency = (invoice as any).currencyCode ?? baseCurrencyCode;
 
   return (
     <Modal open onClose={onClose} title="Sale Receipt" size="md">
@@ -1277,10 +1281,10 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
                       {parseFloat(item.billedQuantity).toFixed(2)} {item.unit?.abbreviation ?? (item.roll ? 'yd' : 'pc')}
                     </td>
                     <td className="text-right py-1.5 font-mono">
-                      {formatAmount(item.unitPrice, GLOBAL_SALE_CURRENCY)}
+                      {formatAmount(item.unitPrice, invoiceCurrency)}
                     </td>
                     <td className="text-right py-1.5 font-mono font-medium">
-                      {formatAmount(item.subTotal, GLOBAL_SALE_CURRENCY)}
+                      {formatAmount(item.subTotal, invoiceCurrency)}
                     </td>
                   </tr>
                 ))}
@@ -1292,12 +1296,12 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
             {parseFloat(invoice.discountAmount) > 0 && (
               <div className="flex justify-between text-gray-600">
                 <span>Discount</span>
-                <span className="font-mono">- {formatAmount(invoice.discountAmount, GLOBAL_SALE_CURRENCY)}</span>
+                <span className="font-mono">- {formatAmount(invoice.discountAmount, invoiceCurrency)}</span>
               </div>
             )}
             <div className="flex justify-between font-bold text-gray-900">
               <span>Total</span>
-              <span className="font-mono">{formatAmount(invoice.netAmount, GLOBAL_SALE_CURRENCY)}</span>
+              <span className="font-mono">{formatAmount(invoice.netAmount, invoiceCurrency)}</span>
             </div>
           </div>
 
@@ -1306,13 +1310,13 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
               {invoice.salePayments.map((p) => (
                 <div key={p.id} className="flex justify-between text-gray-600">
                   <span>{p.paymentMethod.replace('_', ' ')}</span>
-                  <span className="font-mono text-green-600">{formatAmount(p.amount, GLOBAL_SALE_CURRENCY)}</span>
+                  <span className="font-mono text-green-600">{formatAmount(p.amount, invoiceCurrency)}</span>
                 </div>
               ))}
               {parseFloat(invoice.dueAmount) > 0 && (
                 <div className="flex justify-between font-bold text-red-600">
                   <span>Due</span>
-                  <span className="font-mono">{formatAmount(invoice.dueAmount, GLOBAL_SALE_CURRENCY)}</span>
+                  <span className="font-mono">{formatAmount(invoice.dueAmount, invoiceCurrency)}</span>
                 </div>
               )}
             </div>

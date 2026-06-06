@@ -1,68 +1,50 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { AppError } from '../../common/errors/app-error';
+import { PrismaService } from '../../database/prisma.service';
 
-export interface Role {
-  id: string;
-  name: string;
-  description: string;
-  permissions: string[];
-}
+const ROLE_SELECT = {
+  id: true,
+  name: true,
+  description: true,
+  createdAt: true,
+  updatedAt: true,
+  rolePermissions: {
+    include: { permission: { select: { id: true, name: true, description: true } } },
+  },
+  _count: { select: { userRoles: true } },
+} as const;
 
 @Injectable()
 export class RolesService {
-  private readonly logger = new Logger(RolesService.name);
+  constructor(private readonly prisma: PrismaService) {}
 
-  private roles: Role[] = [
-    {
-      id: 'admin-role-id',
-      name: 'Administrator',
-      description: 'Full access to all modules and system configurations',
-      permissions: ['*'],
-    },
-    {
-      id: 'manager-role-id',
-      name: 'Manager',
-      description: 'Access to inventory, sales, and settings, but no user control',
-      permissions: ['inventory:*', 'sales:*', 'settings:read'],
-    },
-    {
-      id: 'cashier-role-id',
-      name: 'Cashier',
-      description: 'Access to POS screen and sales transactions',
-      permissions: ['sales:create', 'sales:read'],
-    },
-  ];
-
-  async findAll(): Promise<Role[]> {
-    this.logger.log('Fetching all roles');
-    return this.roles;
+  async findAll() {
+    const roles = await this.prisma.role.findMany({
+      select: ROLE_SELECT,
+      orderBy: { name: 'asc' },
+    });
+    return roles.map(this.mapRole);
   }
 
-  async findOne(id: string): Promise<Role> {
-    this.logger.log(`Fetching role by ID: ${id}`);
-    const role = this.roles.find(r => r.id === id);
-    if (!role) {
-      throw AppError.notFound(`Role with ID ${id} not found`, 'ROLE_NOT_FOUND');
-    }
-    return role;
+  async findOne(id: string) {
+    const role = await this.prisma.role.findUnique({ where: { id }, select: ROLE_SELECT });
+    if (!role) throw AppError.notFound(`Role not found`, 'ROLE_NOT_FOUND');
+    return this.mapRole(role);
   }
 
-  async create(data: { name: string; description: string; permissions: string[] }): Promise<Role> {
-    this.logger.log(`Creating new role: ${data.name}`);
-    
-    const exists = this.roles.some(r => r.name.toLowerCase() === data.name.toLowerCase());
-    if (exists) {
-      throw AppError.conflict(`Role with name ${data.name} already exists`, 'ROLE_EXISTS');
-    }
+  async findAllPermissions() {
+    return this.prisma.permission.findMany({ orderBy: { name: 'asc' } });
+  }
 
-    const newRole: Role = {
-      id: `role-${Date.now()}`,
-      name: data.name,
-      description: data.description,
-      permissions: data.permissions,
+  private mapRole(role: any) {
+    return {
+      id: role.id,
+      name: role.name,
+      description: role.description ?? null,
+      createdAt: role.createdAt,
+      updatedAt: role.updatedAt,
+      permissions: role.rolePermissions.map((rp: any) => rp.permission.name),
+      userCount: role._count?.userRoles ?? 0,
     };
-
-    this.roles.push(newRole);
-    return newRole;
   }
 }

@@ -3,7 +3,8 @@ import { AlertTriangle, Download, Package } from 'lucide-react';
 import { useState } from 'react';
 import { reportsApi } from '../../api/reports';
 import Pagination from '../../components/ui/Pagination';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 
 type ViewMode = 'stock' | 'lowstock' | 'movements';
 
@@ -14,6 +15,7 @@ function monthStart() {
 }
 
 export default function InventoryReportPage() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const [view, setView] = useState<ViewMode>('stock');
   const [productType, setProductType] = useState('');
   const [threshold, setThreshold] = useState(10);
@@ -147,7 +149,7 @@ export default function InventoryReportPage() {
                         <td className="px-4 py-3 text-gray-700">{p.productType === 'FABRIC_ROLL' ? `${parseFloat(p.totalRemainingYard).toFixed(2)} yd` : '—'}</td>
                         <td className="px-4 py-3 text-center text-gray-700">{p.stockItemCount || '—'}</td>
                         <td className="px-4 py-3 text-gray-700">{parseFloat(p.totalStockQty) > 0 ? p.totalStockQty : '—'}</td>
-                        <td className="px-4 py-3 text-gray-700">{formatAmount(p.retailPrice, GLOBAL_SALE_CURRENCY)}</td>
+                        <td className="px-4 py-3 text-gray-700">{formatAmount(p.retailPrice, baseCurrencyCode)}</td>
                       </tr>
                     ))}
                   </tbody>
