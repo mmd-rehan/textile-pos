@@ -68,8 +68,15 @@ function CompanyTab({ initial }: { initial: Record<string, string> }) {
   const mut = useMutation({
     mutationFn: () => settingsApi.updateCompany(form),
     onSuccess: () => {
+      // Invalidate everything that shows currency labels or base currency amounts
       qc.invalidateQueries({ queryKey: ['settings-company'] });
+      qc.invalidateQueries({ queryKey: ['currencies-all'] });
       qc.invalidateQueries({ queryKey: ['currencies-exchange-rates'] });
+      qc.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      qc.invalidateQueries({ queryKey: ['report-sales'] });
+      qc.invalidateQueries({ queryKey: ['report-purchases'] });
+      qc.invalidateQueries({ queryKey: ['report-sales-monthly'] });
+      qc.invalidateQueries({ queryKey: ['report-sales-products'] });
       showNotification('Company settings saved.', 'success');
     },
     onError: () => showNotification('Failed to save settings.', 'error'),

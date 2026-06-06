@@ -123,7 +123,7 @@ export default function PurchasesReportPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    {['PO #', 'Date', 'Supplier', 'Currency', 'Total (Original)', 'Total (PKR)', 'Paid', 'Due', 'Rolls', 'Status'].map((h) => (
+                    {['PO #', 'Date', 'Supplier', 'Currency', 'Total (Original)', `Total (${baseCurrencyCode})`, 'Paid', 'Due', 'Rolls', 'Status'].map((h) => (
                       <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>

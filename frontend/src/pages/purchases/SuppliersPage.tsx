@@ -6,6 +6,8 @@ import { suppliersApi } from '../../api/suppliers';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Pagination from '../../components/ui/Pagination';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { useAppStore } from '../../store/useAppStore';
 import type { Supplier } from '../../types';
 
@@ -19,6 +21,7 @@ interface SupplierForm {
 
 export default function SuppliersPage() {
   const { showNotification } = useAppStore();
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -154,11 +157,7 @@ export default function SuppliersPage() {
                     <td className="px-4 py-3 text-gray-500">{s.phone ?? '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{s.email ?? '—'}</td>
                     <td className="px-4 py-3 text-right font-mono text-gray-700">
-                      {parseFloat(s.currentBalance).toLocaleString('en-PK', {
-                        style: 'currency',
-                        currency: 'PKR',
-                        maximumFractionDigits: 0,
-                      })}
+                      {formatAmount(s.currentBalance, baseCurrencyCode)}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-500">
                       {s._count?.purchaseOrders ?? 0}
