@@ -6,7 +6,8 @@ import { purchasesApi } from '../../api/purchases';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
-import { formatAmount, getCurrency, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount, getCurrency } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { useAppStore } from '../../store/useAppStore';
 import type { InvoiceStatus, SupplierPayment } from '../../types';
 
@@ -41,6 +42,7 @@ interface PaymentForm {
 }
 
 export default function PurchaseDetailPage() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showNotification } = useAppStore();
@@ -106,9 +108,9 @@ export default function PurchaseDetailPage() {
   }
 
   const status = STATUS_BADGE[po.status] ?? STATUS_BADGE.DRAFT;
-  const isForeign = po.purchaseCurrencyCode !== GLOBAL_SALE_CURRENCY;
+  const isForeign = po.purchaseCurrencyCode !== baseCurrencyCode;
   const buyCcy = getCurrency(po.purchaseCurrencyCode);
-  const baseCcy = getCurrency(GLOBAL_SALE_CURRENCY);
+  const baseCcy = getCurrency(baseCurrencyCode);
   const rate = parseFloat(po.exchangeRateToBaseCurrency);
 
   const paid = parseFloat(po.paidAmountOriginalCurrency ?? '0');
@@ -172,7 +174,7 @@ export default function PurchaseDetailPage() {
           </p>
           {isForeign && (
             <p className="mt-0.5 text-xs text-gray-500 font-mono">
-              ≈ {formatAmount(po.totalBaseCurrency, GLOBAL_SALE_CURRENCY)}
+              ≈ {formatAmount(po.totalBaseCurrency, baseCurrencyCode)}
             </p>
           )}
         </div>
@@ -211,7 +213,7 @@ export default function PurchaseDetailPage() {
                 <th className="px-4 py-3 text-left">Date</th>
                 <th className="px-4 py-3 text-left">Method</th>
                 <th className="px-4 py-3 text-right">Amount ({po.purchaseCurrencyCode})</th>
-                {isForeign && <th className="px-4 py-3 text-right">Amount ({GLOBAL_SALE_CURRENCY})</th>}
+                {isForeign && <th className="px-4 py-3 text-right">Amount ({baseCurrencyCode})</th>}
                 <th className="px-4 py-3 text-left">Notes</th>
               </tr>
             </thead>
@@ -225,7 +227,7 @@ export default function PurchaseDetailPage() {
                   </td>
                   {isForeign && (
                     <td className="px-4 py-3 text-right font-mono text-gray-400 text-xs">
-                      {formatAmount(p.amountBaseCurrency, GLOBAL_SALE_CURRENCY)}
+                      {formatAmount(p.amountBaseCurrency, baseCurrencyCode)}
                     </td>
                   )}
                   <td className="px-4 py-3 text-gray-500 text-xs">{p.notes ?? '—'}</td>
@@ -252,8 +254,8 @@ export default function PurchaseDetailPage() {
                 <th className="px-4 py-3 text-right">Length</th>
                 <th className="px-4 py-3 text-right">Remaining</th>
                 <th className="px-4 py-3 text-right">Buy/yd ({po.purchaseCurrencyCode})</th>
-                {isForeign && <th className="px-4 py-3 text-right">Buy/yd ({GLOBAL_SALE_CURRENCY})</th>}
-                <th className="px-4 py-3 text-right">Sale/yd ({GLOBAL_SALE_CURRENCY})</th>
+                {isForeign && <th className="px-4 py-3 text-right">Buy/yd ({baseCurrencyCode})</th>}
+                <th className="px-4 py-3 text-right">Sale/yd ({baseCurrencyCode})</th>
                 <th className="px-4 py-3 text-center">Status</th>
                 <th className="px-4 py-3 text-left">Barcode</th>
               </tr>
@@ -284,12 +286,12 @@ export default function PurchaseDetailPage() {
                     {isForeign && (
                       <td className="px-4 py-3 text-right font-mono text-gray-400 text-xs">
                         {roll.purchasePricePerYardBaseCurrency
-                          ? formatAmount(roll.purchasePricePerYardBaseCurrency, GLOBAL_SALE_CURRENCY)
+                          ? formatAmount(roll.purchasePricePerYardBaseCurrency, baseCurrencyCode)
                           : '—'}
                       </td>
                     )}
                     <td className="px-4 py-3 text-right font-mono text-gray-500">
-                      {roll.salePricePerYard ? formatAmount(roll.salePricePerYard, GLOBAL_SALE_CURRENCY) : '—'}
+                      {roll.salePricePerYard ? formatAmount(roll.salePricePerYard, baseCurrencyCode) : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <Badge variant={rs.variant}>{rs.label}</Badge>
@@ -321,7 +323,7 @@ export default function PurchaseDetailPage() {
                 <th className="px-4 py-3 text-right">Qty</th>
                 <th className="px-4 py-3 text-right">Unit Cost ({po.purchaseCurrencyCode})</th>
                 <th className="px-4 py-3 text-right">Subtotal ({po.purchaseCurrencyCode})</th>
-                {isForeign && <th className="px-4 py-3 text-right">Subtotal ({GLOBAL_SALE_CURRENCY})</th>}
+                {isForeign && <th className="px-4 py-3 text-right">Subtotal ({baseCurrencyCode})</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -339,7 +341,7 @@ export default function PurchaseDetailPage() {
                   </td>
                   {isForeign && (
                     <td className="px-4 py-3 text-right font-mono text-gray-400 text-xs">
-                      {formatAmount(item.lineTotalBaseCurrency, GLOBAL_SALE_CURRENCY)}
+                      {formatAmount(item.lineTotalBaseCurrency, baseCurrencyCode)}
                     </td>
                   )}
                 </tr>
@@ -351,7 +353,7 @@ export default function PurchaseDetailPage() {
                 </td>
                 {isForeign && (
                   <td className="px-4 py-3 text-right font-mono font-bold text-gray-500 text-xs">
-                    {formatAmount(po.totalBaseCurrency, GLOBAL_SALE_CURRENCY)}
+                    {formatAmount(po.totalBaseCurrency, baseCurrencyCode)}
                   </td>
                 )}
               </tr>

@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { reportsApi } from '../api/reports';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../constants/currencies';
+import { formatAmount } from '../constants/currencies';
+import { useBaseCurrency } from '../hooks/useBaseCurrency';
 
 function StatCard({
   title,
@@ -52,6 +53,7 @@ function StatCard({
 }
 
 export default function Dashboard() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['dashboard-summary'],
     queryFn: () => reportsApi.getDashboard(),
@@ -92,7 +94,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
             title="Today's Sales"
-            value={s ? formatAmount(s.today.netAmount, GLOBAL_SALE_CURRENCY) : '—'}
+            value={s ? formatAmount(s.today.netAmount, baseCurrencyCode) : '—'}
             sub={`${s?.today.invoiceCount ?? 0} invoice${s?.today.invoiceCount !== 1 ? 's' : ''}`}
             icon={ShoppingCart}
             color="bg-primary-50 text-primary-600"
@@ -101,7 +103,7 @@ export default function Dashboard() {
           />
           <StatCard
             title="Collected Today"
-            value={s ? formatAmount(s.today.paidAmount, GLOBAL_SALE_CURRENCY) : '—'}
+            value={s ? formatAmount(s.today.paidAmount, baseCurrencyCode) : '—'}
             sub="cash + non-cash"
             icon={CreditCard}
             color="bg-green-50 text-green-600"
@@ -109,7 +111,7 @@ export default function Dashboard() {
           />
           <StatCard
             title="Outstanding Credit"
-            value={s ? formatAmount(s.totalOutstandingCredit.amount, GLOBAL_SALE_CURRENCY) : '—'}
+            value={s ? formatAmount(s.totalOutstandingCredit.amount, baseCurrencyCode) : '—'}
             sub={`${s?.totalOutstandingCredit.customerCount ?? 0} customer${s?.totalOutstandingCredit.customerCount !== 1 ? 's' : ''}`}
             icon={CreditCard}
             color="bg-amber-50 text-amber-600"
@@ -191,7 +193,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <span className="text-sm font-semibold text-gray-700 shrink-0">
-                    {formatAmount(p.totalRevenue, GLOBAL_SALE_CURRENCY)}
+                    {formatAmount(p.totalRevenue, baseCurrencyCode)}
                   </span>
                 </div>
               ))}

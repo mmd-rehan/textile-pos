@@ -6,6 +6,8 @@ import Inventory from './pages/Inventory';
 import LoginPage from './pages/LoginPage';
 import NewSale from './pages/NewSale';
 import SalesHistory from './pages/SalesHistory';
+import SettingsPage from './pages/admin/SettingsPage';
+import UsersPage from './pages/admin/UsersPage';
 import BatchesPage from './pages/catalog/BatchesPage';
 import BrandsPage from './pages/catalog/BrandsPage';
 import CategoriesPage from './pages/catalog/CategoriesPage';
@@ -26,15 +28,15 @@ import RollListPage from './pages/inventory/RollListPage';
 import WastageListPage from './pages/inventory/WastageListPage';
 import RetailPOSPage from './pages/pos/RetailPOSPage';
 import WholesalePOSPage from './pages/pos/WholesalePOSPage';
+import PurchaseCreatePage from './pages/purchases/PurchaseCreatePage';
+import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
+import PurchaseListPage from './pages/purchases/PurchaseListPage';
+import SuppliersPage from './pages/purchases/SuppliersPage';
 import CustomersReportPage from './pages/reports/CustomersReportPage';
 import InventoryReportPage from './pages/reports/InventoryReportPage';
 import PurchasesReportPage from './pages/reports/PurchasesReportPage';
 import SalesReportPage from './pages/reports/SalesReportPage';
 import WastageReportPage from './pages/reports/WastageReportPage';
-import PurchaseCreatePage from './pages/purchases/PurchaseCreatePage';
-import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
-import PurchaseListPage from './pages/purchases/PurchaseListPage';
-import SuppliersPage from './pages/purchases/SuppliersPage';
 
 function App() {
   return (
@@ -328,6 +330,24 @@ function App() {
             element={
               <ProtectedRoute permission="read:purchases">
                 <PurchasesReportPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Admin */}
+          <Route
+            path="admin/settings"
+            element={
+              <ProtectedRoute permission="read:settings">
+                <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/users"
+            element={
+              <ProtectedRoute permission="read:users">
+                <UsersPage />
               </ProtectedRoute>
             }
           />

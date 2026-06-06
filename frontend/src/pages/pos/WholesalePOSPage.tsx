@@ -20,7 +20,8 @@ import { inventoryApi } from '../../api/inventory';
 import type { CreateWholesaleSaleInput } from '../../api/sales';
 import { salesApi } from '../../api/sales';
 import Modal from '../../components/ui/Modal';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { useAppStore } from '../../store/useAppStore';
 import type {
   BarcodeLookupResult,
@@ -145,6 +146,7 @@ function getInvoiceTotals(lines: WholesaleCartLine[], payments: PaymentEntry[]) 
 
 export default function WholesalePOSPage() {
   const { showNotification } = useAppStore();
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const barcodeRef = useRef<HTMLInputElement>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -696,7 +698,7 @@ export default function WholesalePOSPage() {
                       ? 'text-red-600'
                       : 'text-green-600'
                   }`}>
-                    Balance: {formatAmount(customerOutstanding.currentBalance, GLOBAL_SALE_CURRENCY)}
+                    Balance: {formatAmount(customerOutstanding.currentBalance, baseCurrencyCode)}
                   </span>
                 )}
               </div>
@@ -760,10 +762,10 @@ export default function WholesalePOSPage() {
         {/* Credit limit display */}
         {customerOutstanding?.creditLimit && (
           <div className="mt-2 flex gap-4 text-xs text-gray-500">
-            <span>Limit: <strong>{formatAmount(customerOutstanding.creditLimit, GLOBAL_SALE_CURRENCY)}</strong></span>
+            <span>Limit: <strong>{formatAmount(customerOutstanding.creditLimit, baseCurrencyCode)}</strong></span>
             {customerOutstanding.availableCredit && (
               <span>Available: <strong className={parseFloat(customerOutstanding.availableCredit) < 0 ? 'text-red-600' : 'text-green-700'}>
-                {formatAmount(customerOutstanding.availableCredit, GLOBAL_SALE_CURRENCY)}
+                {formatAmount(customerOutstanding.availableCredit, baseCurrencyCode)}
               </strong></span>
             )}
             <span>Unpaid invoices: <strong>{customerOutstanding.unpaidInvoicesCount}</strong></span>
@@ -842,7 +844,7 @@ export default function WholesalePOSPage() {
                           <p className="text-xs text-gray-400 font-mono mt-0.5">{result.productCode}</p>
                           {result.wholesalePrice && parseFloat(result.wholesalePrice) > 0 && (
                             <p className="text-xs text-blue-600 mt-0.5">
-                              WS: {formatAmount(result.wholesalePrice, GLOBAL_SALE_CURRENCY)}/{isRoll ? 'yd' : 'pc'}
+                              WS: {formatAmount(result.wholesalePrice, baseCurrencyCode)}/{isRoll ? 'yd' : 'pc'}
                             </p>
                           )}
                         </div>
@@ -989,7 +991,7 @@ export default function WholesalePOSPage() {
                             </td>
                             <td className="px-4 py-3 text-right">
                               <span className="text-sm font-semibold text-gray-900">
-                                {formatAmount(subTotal, GLOBAL_SALE_CURRENCY)}
+                                {formatAmount(subTotal, baseCurrencyCode)}
                               </span>
                               {line.isFullRoll && (
                                 <p className="text-xs text-blue-600">{billed.toFixed(2)} yd total</p>
@@ -1090,7 +1092,7 @@ export default function WholesalePOSPage() {
                               />
                             </td>
                             <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                              {formatAmount(subtotal, GLOBAL_SALE_CURRENCY)}
+                              {formatAmount(subtotal, baseCurrencyCode)}
                             </td>
                             <td className="px-2 py-3">
                               <button
@@ -1203,7 +1205,7 @@ export default function WholesalePOSPage() {
                 onClick={(e) => { e.stopPropagation(); fillRemainingAsCash(); }}
                 className="mt-2 w-full text-xs text-primary-600 hover:text-primary-800 border border-primary-200 rounded-lg py-1.5 hover:bg-primary-50"
               >
-                Fill {formatAmount(due, GLOBAL_SALE_CURRENCY)} as Cash
+                Fill {formatAmount(due, baseCurrencyCode)} as Cash
               </button>
             )}
           </div>
@@ -1213,21 +1215,21 @@ export default function WholesalePOSPage() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Items ({allLines.length})</span>
-                <span>{formatAmount(netAmount, GLOBAL_SALE_CURRENCY)}</span>
+                <span>{formatAmount(netAmount, baseCurrencyCode)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Paid now</span>
-                <span className="text-green-700">{formatAmount(totalPaid, GLOBAL_SALE_CURRENCY)}</span>
+                <span className="text-green-700">{formatAmount(totalPaid, baseCurrencyCode)}</span>
               </div>
               {due > 0 && (
                 <div className="flex justify-between text-sm font-semibold text-amber-700 bg-amber-50 rounded px-2 py-1">
                   <span>Credit balance</span>
-                  <span>{formatAmount(due, GLOBAL_SALE_CURRENCY)}</span>
+                  <span>{formatAmount(due, baseCurrencyCode)}</span>
                 </div>
               )}
               <div className="flex justify-between text-base font-bold text-gray-900 border-t border-gray-100 pt-2">
                 <span>Total</span>
-                <span>{formatAmount(netAmount, GLOBAL_SALE_CURRENCY)}</span>
+                <span>{formatAmount(netAmount, baseCurrencyCode)}</span>
               </div>
             </div>
 
@@ -1296,7 +1298,7 @@ export default function WholesalePOSPage() {
                 <div className="text-right">
                   <p className="text-sm font-semibold text-green-700">{parseFloat(roll.remainingLengthYard).toFixed(2)} yd</p>
                   {roll.salePricePerYard && (
-                    <p className="text-xs text-gray-400">{formatAmount(roll.salePricePerYard, GLOBAL_SALE_CURRENCY)}/yd</p>
+                    <p className="text-xs text-gray-400">{formatAmount(roll.salePricePerYard, baseCurrencyCode)}/yd</p>
                   )}
                 </div>
               </button>
@@ -1345,7 +1347,7 @@ export default function WholesalePOSPage() {
                     {parseFloat(item.quantityOnHand).toFixed(0)} {item.unit?.abbreviation ?? 'pc'}
                   </p>
                   {item.salePricePerUnit && (
-                    <p className="text-xs text-gray-400">{formatAmount(item.salePricePerUnit, GLOBAL_SALE_CURRENCY)}/pc</p>
+                    <p className="text-xs text-gray-400">{formatAmount(item.salePricePerUnit, baseCurrencyCode)}/pc</p>
                   )}
                 </div>
               </button>
@@ -1385,7 +1387,9 @@ interface WholesaleInvoiceViewProps {
 }
 
 function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onPrint, onClose }: WholesaleInvoiceViewProps) {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const { invoice, company } = receiptData;
+  const invoiceCurrency = (invoice as any).currencyCode ?? baseCurrencyCode;
   const items = invoice.saleInvoiceItems ?? [];
   const pmts = invoice.salePayments ?? [];
   const paid = parseFloat(invoice.paidAmount) || 0;
@@ -1476,10 +1480,10 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
                   {parseFloat(item.billedQuantity).toFixed(2)} {item.unit?.abbreviation ?? 'yd'}
                 </td>
                 <td className="px-3 py-2 text-right text-gray-700">
-                  {formatAmount(item.unitPrice, GLOBAL_SALE_CURRENCY)}
+                  {formatAmount(item.unitPrice, invoiceCurrency)}
                 </td>
                 <td className="px-3 py-2 text-right font-semibold text-gray-900">
-                  {formatAmount(item.subTotal, GLOBAL_SALE_CURRENCY)}
+                  {formatAmount(item.subTotal, invoiceCurrency)}
                 </td>
               </tr>
             ))}
@@ -1491,12 +1495,12 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
           {discount > 0 && (
             <div className="flex justify-between text-gray-600">
               <span>Discount</span>
-              <span>−{formatAmount(discount, GLOBAL_SALE_CURRENCY)}</span>
+              <span>−{formatAmount(discount, invoiceCurrency)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-base text-gray-900 border-t border-gray-200 pt-2">
             <span>Net Total</span>
-            <span>{formatAmount(net, GLOBAL_SALE_CURRENCY)}</span>
+            <span>{formatAmount(net, invoiceCurrency)}</span>
           </div>
         </div>
 
@@ -1507,12 +1511,12 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
             {pmts.map((p) => (
               <div key={p.id} className="flex justify-between text-sm text-gray-700">
                 <span>{p.paymentMethod.replace(/_/g, ' ')}</span>
-                <span>{formatAmount(p.amount, GLOBAL_SALE_CURRENCY)}</span>
+                <span>{formatAmount(p.amount, invoiceCurrency)}</span>
               </div>
             ))}
             <div className="flex justify-between text-sm font-medium text-green-700 mt-1">
               <span>Total Paid</span>
-              <span>{formatAmount(paid, GLOBAL_SALE_CURRENCY)}</span>
+              <span>{formatAmount(paid, invoiceCurrency)}</span>
             </div>
           </div>
         )}
@@ -1524,7 +1528,7 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
               <p className="text-sm font-bold text-amber-800">Credit Balance</p>
               <p className="text-xs text-amber-600">Added to customer account</p>
             </div>
-            <p className="text-lg font-bold text-amber-900">{formatAmount(due, GLOBAL_SALE_CURRENCY)}</p>
+            <p className="text-lg font-bold text-amber-900">{formatAmount(due, invoiceCurrency)}</p>
           </div>
         )}
 

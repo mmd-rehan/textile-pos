@@ -6,7 +6,8 @@ import { inventoryApi } from '../../api/inventory';
 import { rollsApi } from '../../api/rolls';
 import Badge from '../../components/ui/Badge';
 import Pagination from '../../components/ui/Pagination';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { useAppStore } from '../../store/useAppStore';
 import type { RollStatus } from '../../types';
 
@@ -26,7 +27,7 @@ const RECON_BADGE: Record<string, { label: string; variant: 'green' | 'red' | 'y
   REMNANT: { label: 'Remnant Created', variant: 'blue' },
 };
 
-function fmt(n: string | number, currency = GLOBAL_SALE_CURRENCY) {
+function fmt(n: string | number, currency: string) {
   return formatAmount(n, currency);
 }
 
@@ -84,6 +85,7 @@ function MarkFinishedModal({ rollId, onClose }: { rollId: string; onClose: () =>
 }
 
 export default function RollDetailPage() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showNotification } = useAppStore();
@@ -137,8 +139,8 @@ export default function RollDetailPage() {
 
   const status = STATUS_BADGE[roll.status] ?? { label: roll.status, variant: 'gray' as const };
   const purchaseRef = roll.purchaseRolls?.[0];
-  const buyCurrency = purchaseRef?.purchaseOrder.purchaseCurrencyCode ?? GLOBAL_SALE_CURRENCY;
-  const isForeignBuy = buyCurrency !== GLOBAL_SALE_CURRENCY;
+  const buyCurrency = purchaseRef?.purchaseOrder.purchaseCurrencyCode ?? baseCurrencyCode;
+  const isForeignBuy = buyCurrency !== baseCurrencyCode;
   const canReconcile = roll.status !== 'SOLD' && roll.status !== 'FINISHED';
   const canFinish = roll.status !== 'SOLD' && roll.status !== 'FINISHED';
 
@@ -199,14 +201,14 @@ export default function RollDetailPage() {
           </p>
           {isForeignBuy && roll.purchasePricePerYardBaseCurrency && (
             <p className="mt-0.5 text-xs text-gray-500 font-mono">
-              ≈ {fmt(roll.purchasePricePerYardBaseCurrency, GLOBAL_SALE_CURRENCY)} {GLOBAL_SALE_CURRENCY}
+              ≈ {fmt(roll.purchasePricePerYardBaseCurrency, baseCurrencyCode)} {baseCurrencyCode}
             </p>
           )}
         </div>
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sale Price / yd ({GLOBAL_SALE_CURRENCY})</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sale Price / yd ({baseCurrencyCode})</p>
           <p className="text-xl font-bold text-gray-900 mt-1 font-mono">
-            {roll.salePricePerYard ? fmt(roll.salePricePerYard, GLOBAL_SALE_CURRENCY) : '—'}
+            {roll.salePricePerYard ? fmt(roll.salePricePerYard, baseCurrencyCode) : '—'}
           </p>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { batchesApi } from '../../api/batches';
@@ -9,7 +9,9 @@ import { purchasesApi } from '../../api/purchases';
 import { suppliersApi } from '../../api/suppliers';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
-import { CURRENCIES, GLOBAL_SALE_CURRENCY, formatAmount, getCurrency } from '../../constants/currencies';
+import { currenciesApi } from '../../api/currencies';
+import { CURRENCIES, formatAmount, getCurrency } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { COLORS_KEY } from '../../hooks/useColors';
 import { DESIGNS_KEY } from '../../hooks/useDesigns';
 import { useAppStore } from '../../store/useAppStore';
@@ -67,11 +69,11 @@ const defaultRow = (): PurchaseRow => ({
   description: '',
 });
 
-const saleCurrency = getCurrency(GLOBAL_SALE_CURRENCY);
-
 export default function PurchaseCreatePage() {
   const navigate = useNavigate();
   const { showNotification } = useAppStore();
+  const { code: baseCurrencyCode } = useBaseCurrency();
+  const saleCurrency = getCurrency(baseCurrencyCode);
   const qc = useQueryClient();
 
   const [quickColorOpen, setQuickColorOpen] = useState(false);
@@ -113,7 +115,7 @@ export default function PurchaseCreatePage() {
   const { register, control, handleSubmit, setValue, formState: { errors } } = useForm<PurchaseForm>({
     defaultValues: {
       supplierId: '',
-      currency: 'PKR',
+      currency: baseCurrencyCode,
       exchangeRate: '1',
       batchMode: 'none',
       batchId: '',
@@ -133,9 +135,25 @@ export default function PurchaseCreatePage() {
   const batchMode = useWatch({ control, name: 'batchMode' });
   const selectedCurrencyCode = useWatch({ control, name: 'currency' });
   const exchangeRateStr = useWatch({ control, name: 'exchangeRate' });
-  const purchaseCurrency = getCurrency(selectedCurrencyCode || 'PKR');
-  const isBaseCurrency = selectedCurrencyCode === GLOBAL_SALE_CURRENCY;
+  const purchaseCurrency = getCurrency(selectedCurrencyCode || baseCurrencyCode);
+  const isBaseCurrency = selectedCurrencyCode === baseCurrencyCode;
   const exchangeRate = isBaseCurrency ? 1 : (parseFloat(exchangeRateStr || '1') || 1);
+
+  // Auto-fill exchange rate from stored rates when purchase currency changes
+  useEffect(() => {
+    if (!selectedCurrencyCode || selectedCurrencyCode === baseCurrencyCode) {
+      setValue('exchangeRate', '1');
+      return;
+    }
+    currenciesApi.getExchangeRates(baseCurrencyCode).then((res) => {
+      const match = res.data.find((r) => r.fromCurrencyCode === selectedCurrencyCode);
+      if (match) {
+        setValue('exchangeRate', parseFloat(match.rate).toFixed(6));
+      } else {
+        setValue('exchangeRate', '1');
+      }
+    }).catch(() => {});
+  }, [selectedCurrencyCode, baseCurrencyCode, setValue]);
 
   // Total cost calculation across both row types
   const totalCostOriginal = watchedRows?.reduce((sum, r) => {
@@ -191,7 +209,7 @@ export default function PurchaseCreatePage() {
 
   const createMutation = useMutation({
     mutationFn: (form: PurchaseForm) => {
-      const isForeign = form.currency !== GLOBAL_SALE_CURRENCY;
+      const isForeign = form.currency !== baseCurrencyCode;
       const rollRows = form.rows.filter((r) => r.rowType === 'ROLL');
       const itemRows = form.rows.filter((r) => r.rowType === 'ITEM');
 

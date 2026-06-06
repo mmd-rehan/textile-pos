@@ -5,7 +5,8 @@ import { Link } from 'react-router-dom';
 import { customersApi } from '../../api/customers';
 import Button from '../../components/ui/Button';
 import Pagination from '../../components/ui/Pagination';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import type { Customer, CustomerStatus, CustomerType } from '../../types';
 
 const TYPE_LABELS: Record<CustomerType, string> = {
@@ -26,6 +27,7 @@ const STATUS_COLORS: Record<CustomerStatus, string> = {
 };
 
 export default function CustomersPage() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -137,11 +139,11 @@ export default function CustomersPage() {
                         </span>
                       </td>
                       <td className={`px-4 py-3 text-right font-mono ${balance > 0 ? (overLimit ? 'text-red-600 font-semibold' : 'text-amber-700') : 'text-gray-500'}`}>
-                        {formatAmount(c.currentBalance, GLOBAL_SALE_CURRENCY)}
+                        {formatAmount(c.currentBalance, baseCurrencyCode)}
                         {overLimit && <CreditCard className="inline w-3.5 h-3.5 ml-1 text-red-500" />}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-gray-500">
-                        {c.creditLimit ? formatAmount(c.creditLimit, GLOBAL_SALE_CURRENCY) : '—'}
+                        {c.creditLimit ? formatAmount(c.creditLimit, baseCurrencyCode) : '—'}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-500">
                         {c._count?.saleInvoices ?? 0}

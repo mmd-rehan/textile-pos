@@ -4,9 +4,11 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { reportsApi } from '../../api/reports';
 import Pagination from '../../components/ui/Pagination';
-import { formatAmount, GLOBAL_SALE_CURRENCY } from '../../constants/currencies';
+import { formatAmount } from '../../constants/currencies';
+import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 
 export default function CustomersReportPage() {
+  const { code: baseCurrencyCode } = useBaseCurrency();
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(1);
@@ -49,7 +51,7 @@ export default function CustomersReportPage() {
             <AlertTriangle className="w-4 h-4 text-amber-600" />
             <div>
               <p className="text-xs text-amber-600 font-medium">Total Outstanding</p>
-              <p className="text-xl font-bold text-amber-900">{formatAmount(data.totalOutstanding, GLOBAL_SALE_CURRENCY)}</p>
+              <p className="text-xl font-bold text-amber-900">{formatAmount(data.totalOutstanding, baseCurrencyCode)}</p>
             </div>
           </div>
         )}
@@ -107,15 +109,15 @@ export default function CustomersReportPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-600">{c.phone ?? '—'}</td>
                         <td className="px-4 py-3">
-                          <span className="font-bold text-red-600">{formatAmount(c.currentBalance, GLOBAL_SALE_CURRENCY)}</span>
+                          <span className="font-bold text-red-600">{formatAmount(c.currentBalance, baseCurrencyCode)}</span>
                         </td>
                         <td className="px-4 py-3 text-gray-600">
-                          {limit !== null ? formatAmount(limit, GLOBAL_SALE_CURRENCY) : '—'}
+                          {limit !== null ? formatAmount(limit, baseCurrencyCode) : '—'}
                         </td>
                         <td className="px-4 py-3">
                           {available !== null ? (
                             <span className={`font-medium ${available < 0 ? 'text-red-600' : 'text-green-700'}`}>
-                              {formatAmount(available, GLOBAL_SALE_CURRENCY)}
+                              {formatAmount(available, baseCurrencyCode)}
                             </span>
                           ) : '—'}
                         </td>

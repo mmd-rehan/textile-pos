@@ -15,6 +15,7 @@ import {
   Palette,
   Scissors,
   ScrollText,
+  Settings,
   Shapes,
   ShoppingCart,
   Tag,
@@ -90,12 +91,14 @@ export default function Shell() {
   const [inventoryOpen, setInventoryOpen] = useState(location.pathname.startsWith('/inventory'));
   const [customersOpen, setCustomersOpen] = useState(location.pathname.startsWith('/customers'));
   const [reportsOpen, setReportsOpen] = useState(location.pathname.startsWith('/reports'));
+  const [adminOpen, setAdminOpen] = useState(location.pathname.startsWith('/admin'));
 
   const isCatalog = location.pathname.startsWith('/catalog');
   const isPurchases = location.pathname.startsWith('/purchases');
   const isInventory = location.pathname.startsWith('/inventory');
   const isCustomers = location.pathname.startsWith('/customers');
   const isReports = location.pathname.startsWith('/reports');
+  const isAdmin = location.pathname.startsWith('/admin');
 
   const permissions = user?.permissions ?? [];
   const can = (p: string) => permissions.includes(p);
@@ -111,6 +114,7 @@ export default function Shell() {
   const showInventorySection = visibleInventory.length > 0;
   const showCatalogSection = visibleCatalog.length > 0;
   const showReportsSection = visibleReports.length > 0;
+  const showAdminSection = can('read:settings') || can('read:users');
 
   const handleLogout = async () => {
     try {
@@ -415,6 +419,69 @@ export default function Shell() {
                       </Link>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Admin section */}
+          {showAdminSection && (
+            <div className="pt-2">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => setAdminOpen((o) => !o)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-colors ${
+                    isAdmin
+                      ? 'text-primary-600 bg-primary-50'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Settings className="w-5 h-5 shrink-0" />
+                    <span>Admin</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${adminOpen ? 'rotate-180' : ''}`} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate('/admin/settings')}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg font-medium transition-colors w-full ${
+                    isAdmin
+                      ? 'text-primary-600 bg-primary-50'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <Settings className="w-5 h-5 shrink-0" />
+                </button>
+              )}
+              {sidebarOpen && adminOpen && (
+                <div className="ml-8 mt-1 space-y-0.5">
+                  {can('read:settings') && (
+                    <Link
+                      to="/admin/settings"
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        location.pathname === '/admin/settings'
+                          ? 'text-primary-600 bg-primary-50'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <Settings className="w-4 h-4 shrink-0" />
+                      <span>Settings</span>
+                    </Link>
+                  )}
+                  {can('read:users') && (
+                    <Link
+                      to="/admin/users"
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        location.pathname === '/admin/users'
+                          ? 'text-primary-600 bg-primary-50'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <Users className="w-4 h-4 shrink-0" />
+                      <span>Users</span>
+                    </Link>
+                  )}
                 </div>
               )}
             </div>

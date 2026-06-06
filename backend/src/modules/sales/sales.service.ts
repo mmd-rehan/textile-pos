@@ -95,11 +95,13 @@ export class SalesService {
     const invoiceId = await this.prisma.$transaction(
       async (tx) => {
         // ── Load units ────────────────────────────────────────────────────────
-        const [yardUnit, meterUnit] = await Promise.all([
+        const [yardUnit, meterUnit, baseCurrencySetting] = await Promise.all([
           tx.unit.findFirst({ where: { abbreviation: 'yd' } }),
           tx.unit.findFirst({ where: { abbreviation: 'm' } }),
+          tx.companySetting.findUnique({ where: { key: 'company_currency' } }),
         ]);
         if (!yardUnit) throw AppError.internal('Yard unit not configured', 'UNIT_NOT_FOUND');
+        const baseCurrencyCode = baseCurrencySetting?.value ?? 'PKR';
 
         let meterToYardFactor = new Prisma.Decimal('1.093613');
         if (meterUnit) {
@@ -303,6 +305,7 @@ export class SalesService {
             netAmount,
             paidAmount: totalPaid,
             dueAmount,
+            currencyCode: baseCurrencyCode,
             status: invoiceStatus,
             paymentStatus,
             saleType: 'RETAIL',
@@ -512,11 +515,13 @@ export class SalesService {
     const invoiceId = await this.prisma.$transaction(
       async (tx) => {
         // ── Load units ────────────────────────────────────────────────────────
-        const [yardUnit, meterUnit] = await Promise.all([
+        const [yardUnit, meterUnit, wsBaseCurrencySetting] = await Promise.all([
           tx.unit.findFirst({ where: { abbreviation: 'yd' } }),
           tx.unit.findFirst({ where: { abbreviation: 'm' } }),
+          tx.companySetting.findUnique({ where: { key: 'company_currency' } }),
         ]);
         if (!yardUnit) throw AppError.internal('Yard unit not configured', 'UNIT_NOT_FOUND');
+        const wsBaseCurrencyCode = wsBaseCurrencySetting?.value ?? 'PKR';
 
         let meterToYardFactor = new Prisma.Decimal('1.093613');
         if (meterUnit) {
@@ -735,6 +740,7 @@ export class SalesService {
             netAmount,
             paidAmount: totalPaid,
             dueAmount,
+            currencyCode: wsBaseCurrencyCode,
             status: invoiceStatus,
             paymentStatus,
             saleType: 'WHOLESALE',
