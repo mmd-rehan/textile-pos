@@ -931,21 +931,45 @@ export class SalesService {
     });
   }
 
-  async findAll(query: { page?: number; limit?: number; search?: string; status?: string; saleType?: string }) {
+  async findAll(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    saleType?: string;
+    paymentStatus?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    cashierId?: string;
+  }) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.SaleInvoiceWhereInput = {
-      saleType: (query.saleType as any) ?? 'RETAIL',
-    };
+    const where: Prisma.SaleInvoiceWhereInput = {};
+
+    if (query.saleType) where.saleType = query.saleType as any;
+    if (query.status) where.status = query.status as InvoiceStatus;
+    if (query.paymentStatus) where.paymentStatus = query.paymentStatus as any;
+    if (query.cashierId) where.cashierId = query.cashierId;
+
+    if (query.dateFrom || query.dateTo) {
+      where.createdAt = {};
+      if (query.dateFrom) where.createdAt.gte = new Date(query.dateFrom);
+      if (query.dateTo) {
+        const to = new Date(query.dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.createdAt.lte = to;
+      }
+    }
+
     if (query.search) {
       where.OR = [
         { invoiceNumber: { contains: query.search } },
         { customer: { name: { contains: query.search } } },
+        { customer: { phone: { contains: query.search } } },
       ];
     }
-    if (query.status) where.status = query.status as InvoiceStatus;
 
     const [data, total] = await Promise.all([
       this.prisma.saleInvoice.findMany({

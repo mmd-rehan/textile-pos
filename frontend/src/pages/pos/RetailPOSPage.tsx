@@ -11,6 +11,7 @@ import {
   ShoppingCart,
   Trash2,
   User,
+  UserPlus,
   X
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -29,6 +30,7 @@ import type {
   RollSummaryItem,
   StockItemSummary,
 } from '../../types';
+import CustomerQuickCreateModal from './CustomerQuickCreateModal';
 
 const M_TO_YD = 1.093613;
 const YD_TO_M = 0.9144;
@@ -163,6 +165,7 @@ export default function RetailPOSPage() {
 
   const [rollPicker, setRollPicker] = useState<RollPickerState | null>(null);
   const [stockPicker, setStockPicker] = useState<StockPickerState | null>(null);
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitErrors, setSubmitErrors] = useState<string[]>([]);
@@ -177,7 +180,12 @@ export default function RetailPOSPage() {
     select: (r) => r.data,
   });
 
-  const selectedCustomer = customersData?.find((c) => c.id === customerId);
+  const { data: selectedCustomer } = useQuery({
+    queryKey: ['customer', customerId],
+    queryFn: () => customersApi.getOne(customerId!),
+    enabled: !!customerId,
+    select: (r) => r.data,
+  });
 
   const refocusBarcode = useCallback(() => {
     setTimeout(() => barcodeRef.current?.focus(), 50);
@@ -516,23 +524,23 @@ export default function RetailPOSPage() {
         customerId: customerId ?? undefined,
         lines: rollLines.length > 0
           ? rollLines.map((l) => ({
-              productId: l.productId,
-              rollId: l.rollId,
-              billedQuantity: parseFloat(l.billedQuantity),
-              actualCutQuantity: l.actualCutQuantity !== '' ? parseFloat(l.actualCutQuantity) : undefined,
-              unit: l.unit,
-              unitPrice: parseFloat(l.unitPrice),
-              discountAmount: parseFloat(l.discountAmount) || 0,
-            }))
+            productId: l.productId,
+            rollId: l.rollId,
+            billedQuantity: parseFloat(l.billedQuantity),
+            actualCutQuantity: l.actualCutQuantity !== '' ? parseFloat(l.actualCutQuantity) : undefined,
+            unit: l.unit,
+            unitPrice: parseFloat(l.unitPrice),
+            discountAmount: parseFloat(l.discountAmount) || 0,
+          }))
           : undefined,
         quantityLines: qtyLines.length > 0
           ? qtyLines.map((l) => ({
-              productId: l.productId,
-              productStockItemId: l.productStockItemId,
-              quantity: parseFloat(l.quantity),
-              unitPrice: parseFloat(l.unitPrice),
-              discountAmount: parseFloat(l.discountAmount) || 0,
-            }))
+            productId: l.productId,
+            productStockItemId: l.productStockItemId,
+            quantity: parseFloat(l.quantity),
+            unitPrice: parseFloat(l.unitPrice),
+            discountAmount: parseFloat(l.discountAmount) || 0,
+          }))
           : undefined,
         payments: payments
           .filter((p) => parseFloat(p.amount) > 0)
@@ -914,9 +922,21 @@ export default function RetailPOSPage() {
         <div className="w-80 flex flex-col gap-4 shrink-0">
           {/* Customer */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Customer (optional)
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Customer (optional)
+              </label>
+              {!customerId && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setShowQuickCreate(true); }}
+                  className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  Add Customer
+                </button>
+              )}
+            </div>
             {customerId && selectedCustomer ? (
               <div>
                 <div className="flex items-center justify-between bg-primary-50 border border-primary-200 rounded-lg px-3 py-2">
@@ -937,12 +957,11 @@ export default function RetailPOSPage() {
                   </button>
                 </div>
                 {parseFloat(selectedCustomer.currentBalance) > 0 && (
-                  <div className={`mt-2 px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 ${
-                    selectedCustomer.creditLimit &&
-                    parseFloat(selectedCustomer.currentBalance) >= parseFloat(selectedCustomer.creditLimit)
+                  <div className={`mt-2 px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 ${selectedCustomer.creditLimit &&
+                      parseFloat(selectedCustomer.currentBalance) >= parseFloat(selectedCustomer.creditLimit)
                       ? 'bg-red-50 text-red-700 border border-red-200'
                       : 'bg-amber-50 text-amber-700 border border-amber-200'
-                  }`}>
+                    }`}>
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                     <span>
                       Outstanding:{' '}
@@ -1197,6 +1216,19 @@ export default function RetailPOSPage() {
         </Modal>
       )}
 
+      {/* Customer quick-create modal */}
+      <CustomerQuickCreateModal
+        open={showQuickCreate}
+        onClose={() => { setShowQuickCreate(false); refocusBarcode(); }}
+        onCreated={(customer) => {
+          setCustomerId(customer.id);
+          setCustomerSearch('');
+          setShowCustomerDropdown(false);
+          setShowQuickCreate(false);
+          refocusBarcode();
+        }}
+      />
+
       {/* Receipt modal */}
       {showReceipt && receiptData && (
         <ReceiptModal
@@ -1216,7 +1248,7 @@ export default function RetailPOSPage() {
 function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => void }) {
   const { code: baseCurrencyCode } = useBaseCurrency();
   const { invoice, company } = data;
-  const invoiceCurrency = (invoice as any).currencyCode ?? baseCurrencyCode;
+  const invoiceCurrency = invoice.currencyCode ?? baseCurrencyCode;
 
   return (
     <Modal open onClose={onClose} title="Sale Receipt" size="md">

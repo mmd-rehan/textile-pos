@@ -605,6 +605,7 @@ export interface SaleInvoice {
   id: string;
   invoiceNumber: string;
   customerId?: string | null;
+  currencyCode: string;
   totalAmount: string;
   discountAmount: string;
   taxAmount: string;
