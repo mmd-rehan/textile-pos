@@ -42,6 +42,10 @@ export class SalesController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('saleType') saleType?: string,
+    @Query('paymentStatus') paymentStatus?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('cashierId') cashierId?: string,
   ) {
     return this.salesService.findAll({
       page: page ? Number(page) : undefined,
@@ -49,6 +53,10 @@ export class SalesController {
       search,
       status,
       saleType,
+      paymentStatus,
+      dateFrom,
+      dateTo,
+      cashierId,
     });
   }
 
