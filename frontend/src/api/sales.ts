@@ -58,6 +58,11 @@ export interface SalesQuery {
   limit?: number;
   search?: string;
   status?: string;
+  saleType?: string;
+  paymentStatus?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  cashierId?: string;
 }
 
 export const salesApi = {
