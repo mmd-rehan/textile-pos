@@ -3,6 +3,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { WastageService } from '../wastage/wastage.service';
 import { MarkFinishedDto } from './dto/mark-finished.dto';
 import { QueryReconciliationsDto } from './dto/query-reconciliations.dto';
 import { QueryRollMovementsDto } from './dto/query-roll-movements.dto';
@@ -13,7 +14,10 @@ import { RollsService } from './rolls.service';
 @Controller('rolls')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class RollsController {
-  constructor(private readonly rollsService: RollsService) {}
+  constructor(
+    private readonly rollsService: RollsService,
+    private readonly wastageService: WastageService,
+  ) {}
 
   @Get()
   @RequirePermissions('read:inventory')
@@ -38,6 +42,12 @@ export class RollsController {
   @RequirePermissions('read:inventory')
   async findReconciliations(@Param('id') id: string, @Query() query: QueryReconciliationsDto) {
     return this.rollsService.findReconciliations(id, query);
+  }
+
+  @Get(':id/wastage')
+  @RequirePermissions('read:inventory')
+  async findWastage(@Param('id') id: string) {
+    return this.wastageService.findByRoll(id);
   }
 
   @Post(':id/reconcile')

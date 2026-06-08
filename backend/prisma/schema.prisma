@@ -45,6 +45,13 @@ enum ReconciliationResult {
   REMNANT
 }
 
+enum WastageSourceType {
+  SALE_OVERCUT
+  MANUAL_DAMAGE
+  MANUAL_WASTAGE
+  RECONCILIATION_LOSS
+}
+
 enum RemnantStatus {
   AVAILABLE
   SOLD
@@ -151,17 +158,18 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  userRoles           UserRole[]
-  sessions            Session[]
-  activityLogs        ActivityLog[]
-  auditLogs           AuditLog[]
-  inventoryMovements  InventoryMovement[]
-  stockAdjustments    StockAdjustment[]
-  wastageEntries      WastageEntry[]
-  rollReconciliations RollReconciliation[]
-  saleInvoices        SaleInvoice[]        @relation("CashierInvoices")
-  salePayments        SalePayment[]        @relation("ReceivedByPayments")
-  customerPayments    CustomerPayment[]    @relation("ReceivedByCustomerPayments")
+  userRoles                  UserRole[]
+  sessions                   Session[]
+  activityLogs               ActivityLog[]
+  auditLogs                  AuditLog[]
+  inventoryMovements         InventoryMovement[]
+  stockAdjustments           StockAdjustment[]
+  wastageEntries             WastageEntry[]
+  responsibleWastageEntries  WastageEntry[]       @relation("ResponsibleUserWastage")
+  rollReconciliations        RollReconciliation[]
+  saleInvoices               SaleInvoice[]        @relation("CashierInvoices")
+  salePayments               SalePayment[]        @relation("ReceivedByPayments")
+  customerPayments           CustomerPayment[]    @relation("ReceivedByCustomerPayments")
 
   @@map("users")
 }
@@ -605,22 +613,31 @@ model StockAdjustment {
 }
 
 model WastageEntry {
-  id        String   @id @default(uuid())
-  rollId    String?  @map("roll_id")
-  productId String   @map("product_id")
-  quantity  Decimal  @db.Decimal(12, 4)
-  unitId    String   @map("unit_id")
-  reason    String   @db.Text
-  userId    String   @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                 String            @id @default(uuid())
+  rollId             String?           @map("roll_id")
+  productId          String            @map("product_id")
+  quantity           Decimal           @db.Decimal(12, 4)
+  unitId             String            @map("unit_id")
+  sourceType         WastageSourceType @default(SALE_OVERCUT) @map("source_type")
+  saleInvoiceId      String?           @map("sale_invoice_id")
+  reconciliationId   String?           @map("reconciliation_id")
+  responsibleUserId  String?           @map("responsible_user_id")
+  reason             String            @db.Text
+  userId             String            @map("user_id")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
 
-  roll    Roll?   @relation(fields: [rollId], references: [id], onDelete: SetNull)
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
-  unit    Unit    @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roll              Roll?              @relation(fields: [rollId], references: [id], onDelete: SetNull)
+  product           Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  unit              Unit               @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  responsibleUser   User?              @relation("ResponsibleUserWastage", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+  saleInvoice       SaleInvoice?       @relation(fields: [saleInvoiceId], references: [id], onDelete: SetNull)
+  rollReconciliation RollReconciliation? @relation(fields: [reconciliationId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
+  @@index([sourceType])
+  @@index([rollId])
   @@map("wastage_entries")
 }
 
@@ -637,9 +654,10 @@ model RollReconciliation {
   createdAt            DateTime              @default(now()) @map("created_at")
   updatedAt            DateTime              @updatedAt @map("updated_at")
 
-  roll    Roll     @relation(fields: [rollId], references: [id], onDelete: Restrict)
-  user    User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  remnant Remnant?
+  roll          Roll          @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  remnant       Remnant?
+  wastageEntries WastageEntry[]
 
   @@map("roll_reconciliations")
 }
@@ -719,6 +737,7 @@ model SaleInvoice {
   cashier          User              @relation("CashierInvoices", fields: [cashierId], references: [id], onDelete: Restrict)
   saleInvoiceItems SaleInvoiceItem[]
   salePayments     SalePayment[]
+  wastageEntries   WastageEntry[]
 
   @@index([invoiceNumber])
   @@index([createdAt])

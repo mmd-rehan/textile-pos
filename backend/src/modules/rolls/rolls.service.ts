@@ -233,6 +233,8 @@ export class RollsService {
               productId: roll.productId,
               quantity: discrepancy.abs().toFixed(4),
               unitId: yardUnit.id,
+              sourceType: 'RECONCILIATION_LOSS',
+              reconciliationId: reconciliation.id,
               reason: dto.reason,
               userId,
             },
