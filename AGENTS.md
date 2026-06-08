@@ -82,3 +82,18 @@ Product type inventory rules:
 15. Stock movements are required for both roll-based and quantity-based inventory.
 16. For roll products, stock movement references rollId and quantityYard.
 17. For fixed/cut products, stock movement references productId or productVariantId and quantity.
+
+Currency architecture rules:
+1. The system has one current shop/base currency.
+2. Sales use the current base currency in v1.
+3. Purchases can use different currencies.
+4. Purchase records must store original currency and base currency snapshot.
+5. Exchange rate used for a purchase must be saved on the purchase.
+6. Editing current exchange rates must not rewrite historical purchases.
+7. Changing base currency affects new transactions and UI labels only.
+8. Existing records must show their saved currency.
+9. Currency symbols must not be hardcoded in frontend.
+10. Settings changes must invalidate frontend settings/config caches.
+11. Settings changes must be audit logged.
+12. Use Decimal for currency amounts and exchange rates.
+13. Do not implement live exchange-rate APIs in v1.

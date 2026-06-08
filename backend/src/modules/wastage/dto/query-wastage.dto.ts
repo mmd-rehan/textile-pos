@@ -1,5 +1,6 @@
+import { WastageSourceType } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class QueryWastageDto {
   @IsOptional()
@@ -20,11 +21,19 @@ export class QueryWastageDto {
 
   @IsOptional()
   @IsString()
+  responsibleUserId?: string;
+
+  @IsOptional()
+  @IsString()
   rollId?: string;
 
   @IsOptional()
   @IsString()
   productId?: string;
+
+  @IsOptional()
+  @IsEnum(WastageSourceType)
+  sourceType?: WastageSourceType;
 
   @IsOptional()
   @IsString()
