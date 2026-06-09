@@ -3,6 +3,7 @@ import { Prisma, RemnantStatus } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
 import { PrismaService } from '../../database/prisma.service';
+import { FeatureFlagsService } from '../settings/feature-flags.service';
 import { CreateRemnantDto } from './dto/create-remnant.dto';
 import { QueryRemnantsDto } from './dto/query-remnants.dto';
 
@@ -18,7 +19,10 @@ const REMNANT_INCLUDE = {
 
 @Injectable()
 export class RemnantsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly featureFlags: FeatureFlagsService,
+  ) { }
 
   async findAll(query: QueryRemnantsDto) {
     const page = query.page ?? 1;
@@ -52,6 +56,8 @@ export class RemnantsService {
   }
 
   async create(dto: CreateRemnantDto, userId: string) {
+    await this.featureFlags.assertEnabled('REMNANT_MANAGEMENT');
+
     return this.prisma.$transaction(async (tx) => {
       // Lock the source roll within the transaction
       const roll = await tx.roll.findUnique({

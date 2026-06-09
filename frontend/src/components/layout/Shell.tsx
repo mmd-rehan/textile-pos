@@ -28,6 +28,7 @@ import {
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { authApi } from '../../api/auth';
+import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 import { useAppStore } from '../../store/useAppStore';
 import { useAuthStore } from '../../store/useAuthStore';
 
@@ -103,12 +104,27 @@ export default function Shell() {
   const permissions = user?.permissions ?? [];
   const can = (p: string) => permissions.includes(p);
 
-  const visibleNav = navigation.filter((item) => !item.permission || can(item.permission));
+  const { flags } = useFeatureFlags();
+
+  const visibleNav = navigation.filter((item) => {
+    if (item.permission && !can(item.permission)) return false;
+    if (item.href === '/pos/wholesale' && !flags.wholesale_enabled) return false;
+    return true;
+  });
   const visibleCustomers = customerLinks.filter((item) => !item.permission || can(item.permission));
   const visiblePurchases = purchaseLinks.filter((item) => !item.permission || can(item.permission));
-  const visibleInventory = inventoryLinks.filter((item) => !item.permission || can(item.permission));
+  const visibleInventory = inventoryLinks.filter((item) => {
+    if (item.permission && !can(item.permission)) return false;
+    if (item.href === '/inventory/wastage' && !flags.wastage_tracking) return false;
+    if (item.href === '/inventory/remnants' && !flags.remnant_management) return false;
+    return true;
+  });
   const visibleCatalog = catalogLinks.filter((item) => !item.permission || can(item.permission));
-  const visibleReports = reportLinks.filter((item) => !item.permission || can(item.permission));
+  const visibleReports = reportLinks.filter((item) => {
+    if (item.permission && !can(item.permission)) return false;
+    if (item.href === '/reports/wastage' && !flags.wastage_tracking) return false;
+    return true;
+  });
   const showCustomersSection = visibleCustomers.length > 0;
   const showPurchasesSection = visiblePurchases.length > 0;
   const showInventorySection = visibleInventory.length > 0;

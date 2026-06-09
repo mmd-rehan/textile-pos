@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { rollsApi } from '../../api/rolls';
 import Badge from '../../components/ui/Badge';
+import { useFeatureFlag } from '../../hooks/useFeatureFlags';
 import { useAppStore } from '../../store/useAppStore';
 
 function DiffPreview({ expected, physical }: { expected: number; physical: number | null }) {
@@ -48,6 +49,7 @@ export default function ReconcilePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { showNotification } = useAppStore();
+  const { enabled: remnantManagementEnabled } = useFeatureFlag('remnant_management');
 
   const [physicalLength, setPhysicalLength] = useState('');
   const [reason, setReason] = useState('');
@@ -189,7 +191,7 @@ export default function ReconcilePage() {
         </div>
 
         {/* Create remnant toggle */}
-        {physicalNum !== null && physicalNum > 0 && (
+        {remnantManagementEnabled && physicalNum !== null && physicalNum > 0 && (
           <div className="border border-gray-200 rounded-lg p-4 space-y-4">
             <label className="flex items-start gap-3 cursor-pointer">
               <input

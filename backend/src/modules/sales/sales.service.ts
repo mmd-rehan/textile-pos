@@ -3,6 +3,7 @@ import { InvoiceStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
 import { PrismaService } from '../../database/prisma.service';
+import { FeatureFlagsService } from '../settings/feature-flags.service';
 import { CreateRetailSaleDto } from './dto/create-retail-sale.dto';
 import { CreateWholesaleSaleDto } from './dto/create-wholesale-sale.dto';
 
@@ -75,7 +76,10 @@ interface ProcessedQuantityLine {
 
 @Injectable()
 export class SalesService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly featureFlags: FeatureFlagsService,
+  ) {}
 
   async createRetailSale(dto: CreateRetailSaleDto, userId: string, idempotencyKey?: string) {
     if (idempotencyKey) {
@@ -94,14 +98,18 @@ export class SalesService {
 
     const invoiceId = await this.prisma.$transaction(
       async (tx) => {
-        // ── Load units ────────────────────────────────────────────────────────
-        const [yardUnit, meterUnit, baseCurrencySetting] = await Promise.all([
+        // ── Load units + feature flags ────────────────────────────────────────
+        const [yardUnit, meterUnit, baseCurrencySetting, wastageFlag, creditFlag] = await Promise.all([
           tx.unit.findFirst({ where: { abbreviation: 'yd' } }),
           tx.unit.findFirst({ where: { abbreviation: 'm' } }),
           tx.companySetting.findUnique({ where: { key: 'company_currency' } }),
+          tx.featureFlag.findUnique({ where: { name: 'wastage_tracking' } }),
+          tx.featureFlag.findUnique({ where: { name: 'credit_sales' } }),
         ]);
         if (!yardUnit) throw AppError.internal('Yard unit not configured', 'UNIT_NOT_FOUND');
         const baseCurrencyCode = baseCurrencySetting?.value ?? 'PKR';
+        const wastageTrackingEnabled = wastageFlag?.isEnabled ?? false;
+        const creditSalesEnabled = creditFlag?.isEnabled ?? false;
 
         let meterToYardFactor = new Prisma.Decimal('1.093613');
         if (meterUnit) {
@@ -166,6 +174,14 @@ export class SalesService {
           const wastageYard = actualCutYard.gt(billedYard)
             ? actualCutYard.minus(billedYard).toDecimalPlaces(4)
             : new Prisma.Decimal(0);
+
+          if (wastageYard.gt(0) && !wastageTrackingEnabled) {
+            throw AppError.forbidden(
+              'This feature is disabled in system settings.',
+              'FEATURE_DISABLED',
+              { feature: 'WASTAGE_TRACKING' },
+            );
+          }
 
           const unitPrice = new Prisma.Decimal(line.unitPrice.toString());
           const discountAmount = new Prisma.Decimal((line.discountAmount ?? 0).toString());
@@ -301,6 +317,14 @@ export class SalesService {
           .toDecimalPlaces(2);
         const rawDue = grandTotal.minus(totalPaid);
         const dueAmount = rawDue.lt(0) ? new Prisma.Decimal(0) : rawDue.toDecimalPlaces(2);
+
+        if (dueAmount.gt(0) && !creditSalesEnabled) {
+          throw AppError.forbidden(
+            'Credit sales are disabled. Full payment is required.',
+            'FEATURE_DISABLED',
+            { feature: 'CREDIT_SALES' },
+          );
+        }
 
         let invoiceStatus: InvoiceStatus;
         let paymentStatus: PaymentStatus;
@@ -540,6 +564,8 @@ export class SalesService {
       if (existing) return existing;
     }
 
+    await this.featureFlags.assertEnabled('WHOLESALE_POS');
+
     const rollLineCount = dto.lines?.length ?? 0;
     const qtyLineCount = dto.quantityLines?.length ?? 0;
     if (rollLineCount + qtyLineCount === 0) {
@@ -548,14 +574,18 @@ export class SalesService {
 
     const invoiceId = await this.prisma.$transaction(
       async (tx) => {
-        // ── Load units ────────────────────────────────────────────────────────
-        const [yardUnit, meterUnit, wsBaseCurrencySetting] = await Promise.all([
+        // ── Load units + feature flags ────────────────────────────────────────
+        const [yardUnit, meterUnit, wsBaseCurrencySetting, wsWastageFlag, wsCreditFlag] = await Promise.all([
           tx.unit.findFirst({ where: { abbreviation: 'yd' } }),
           tx.unit.findFirst({ where: { abbreviation: 'm' } }),
           tx.companySetting.findUnique({ where: { key: 'company_currency' } }),
+          tx.featureFlag.findUnique({ where: { name: 'wastage_tracking' } }),
+          tx.featureFlag.findUnique({ where: { name: 'credit_sales' } }),
         ]);
         if (!yardUnit) throw AppError.internal('Yard unit not configured', 'UNIT_NOT_FOUND');
         const wsBaseCurrencyCode = wsBaseCurrencySetting?.value ?? 'PKR';
+        const wsWastageTrackingEnabled = wsWastageFlag?.isEnabled ?? false;
+        const wsCreditSalesEnabled = wsCreditFlag?.isEnabled ?? false;
 
         let meterToYardFactor = new Prisma.Decimal('1.093613');
         if (meterUnit) {
@@ -635,6 +665,14 @@ export class SalesService {
           const wastageYard = actualCutYard.gt(billedYard)
             ? actualCutYard.minus(billedYard).toDecimalPlaces(4)
             : new Prisma.Decimal(0);
+
+          if (wastageYard.gt(0) && !wsWastageTrackingEnabled) {
+            throw AppError.forbidden(
+              'This feature is disabled in system settings.',
+              'FEATURE_DISABLED',
+              { feature: 'WASTAGE_TRACKING' },
+            );
+          }
 
           const unitPrice = new Prisma.Decimal(line.unitPrice.toString());
           const discountAmount = new Prisma.Decimal((line.discountAmount ?? 0).toString());
@@ -770,6 +808,14 @@ export class SalesService {
           .toDecimalPlaces(2);
         const rawDue = wsGrandTotal.minus(totalPaid);
         const dueAmount = rawDue.lt(0) ? new Prisma.Decimal(0) : rawDue.toDecimalPlaces(2);
+
+        if (dueAmount.gt(0) && !wsCreditSalesEnabled) {
+          throw AppError.forbidden(
+            'Credit sales are disabled. Full payment is required.',
+            'FEATURE_DISABLED',
+            { feature: 'CREDIT_SALES' },
+          );
+        }
 
         let invoiceStatus: InvoiceStatus;
         let paymentStatus: PaymentStatus;
