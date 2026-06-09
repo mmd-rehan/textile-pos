@@ -22,6 +22,7 @@ import { settingsApi } from '../../api/settings';
 import Modal from '../../components/ui/Modal';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
+import { useFeatureFlag } from '../../hooks/useFeatureFlags';
 import { useAppStore } from '../../store/useAppStore';
 import type {
   BarcodeLookupResult,
@@ -197,6 +198,8 @@ export default function RetailPOSPage() {
   const taxEnabled = taxSettings?.taxEnabled ?? false;
   const taxRatePercent = parseFloat(taxSettings?.taxRatePercent ?? '0') || 0;
   const taxLabel = taxSettings?.taxLabel || 'Tax';
+
+  const { enabled: creditSalesEnabled } = useFeatureFlag('credit_sales');
 
   const { data: customersData } = useQuery({
     queryKey: ['customers-search', customerSearch],
@@ -606,6 +609,8 @@ export default function RetailPOSPage() {
     taxEnabled,
     taxRatePercent,
   );
+
+  const creditBlocked = !creditSalesEnabled && due > 0;
 
   return (
     <div className="flex flex-col gap-4 h-full" onClick={() => refocusBarcode()}>
@@ -1149,6 +1154,15 @@ export default function RetailPOSPage() {
             />
           </div>
 
+          {creditBlocked && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-sm text-amber-800">
+                Credit sales are disabled. Full payment is required to complete this sale.
+              </p>
+            </div>
+          )}
+
           {submitErrors.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-1">
               {submitErrors.map((e, i) => (
@@ -1159,7 +1173,7 @@ export default function RetailPOSPage() {
 
           <button
             onClick={(e) => { e.stopPropagation(); handleCompleteSale(); }}
-            disabled={!canSubmit}
+            disabled={!canSubmit || creditBlocked}
             className="w-full py-3 rounded-xl font-semibold text-sm bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
           >
             {isSubmitting ? (

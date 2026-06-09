@@ -3,6 +3,7 @@ import { Prisma, RollStatus } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
 import { PrismaService } from '../../database/prisma.service';
+import { FeatureFlagsService } from '../settings/feature-flags.service';
 import { MarkFinishedDto } from './dto/mark-finished.dto';
 import { QueryReconciliationsDto } from './dto/query-reconciliations.dto';
 import { QueryRollMovementsDto } from './dto/query-roll-movements.dto';
@@ -33,7 +34,10 @@ const ROLL_INCLUDE = {
 
 @Injectable()
 export class RollsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly featureFlags: FeatureFlagsService,
+  ) {}
 
   async findAll(query: QueryRollDto) {
     const page = query.page ?? 1;
@@ -147,6 +151,10 @@ export class RollsService {
   }
 
   async reconcile(rollId: string, userId: string, dto: ReconcileRollDto) {
+    if (dto.createRemnant) {
+      await this.featureFlags.assertEnabled('REMNANT_MANAGEMENT');
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const roll = await tx.roll.findUnique({
         where: { id: rollId },
@@ -225,8 +233,9 @@ export class RollsService {
           },
         });
 
-        // Record wastage entry for shrinkage
-        if (discrepancy.isNegative()) {
+        // Record wastage entry for shrinkage (only when wastage_tracking is enabled)
+        const wastageFlag = await tx.featureFlag.findUnique({ where: { name: 'wastage_tracking' } });
+        if (discrepancy.isNegative() && (wastageFlag?.isEnabled ?? false)) {
           await tx.wastageEntry.create({
             data: {
               rollId,

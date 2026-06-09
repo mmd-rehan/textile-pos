@@ -1,6 +1,9 @@
+import { Loader2 } from 'lucide-react';
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import FeatureDisabledPage from './components/ui/FeatureDisabledPage';
 import Shell from './components/layout/Shell';
+import { useFeatureFlag } from './hooks/useFeatureFlags';
 import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
 import LoginPage from './pages/LoginPage';
@@ -38,6 +41,27 @@ import PurchasesReportPage from './pages/reports/PurchasesReportPage';
 import SalesReportPage from './pages/reports/SalesReportPage';
 import WastageReportPage from './pages/reports/WastageReportPage';
 
+function FeatureFlagRoute({
+  flagKey,
+  featureName,
+  children,
+}: {
+  flagKey: string;
+  featureName: string;
+  children: React.ReactNode;
+}) {
+  const { enabled, isLoading } = useFeatureFlag(flagKey);
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
+      </div>
+    );
+  }
+  if (!enabled) return <FeatureDisabledPage featureName={featureName} />;
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <Router>
@@ -65,7 +89,9 @@ function App() {
             path="pos/wholesale"
             element={
               <ProtectedRoute permission="write:sales">
-                <WholesalePOSPage />
+                <FeatureFlagRoute flagKey="wholesale_enabled" featureName="Wholesale POS">
+                  <WholesalePOSPage />
+                </FeatureFlagRoute>
               </ProtectedRoute>
             }
           />
@@ -263,7 +289,9 @@ function App() {
             path="inventory/wastage"
             element={
               <ProtectedRoute permission="read:inventory">
-                <WastageListPage />
+                <FeatureFlagRoute flagKey="wastage_tracking" featureName="Wastage Tracking">
+                  <WastageListPage />
+                </FeatureFlagRoute>
               </ProtectedRoute>
             }
           />
@@ -271,7 +299,9 @@ function App() {
             path="inventory/remnants"
             element={
               <ProtectedRoute permission="read:inventory">
-                <RemnantsListPage />
+                <FeatureFlagRoute flagKey="remnant_management" featureName="Remnant Management">
+                  <RemnantsListPage />
+                </FeatureFlagRoute>
               </ProtectedRoute>
             }
           />
@@ -313,7 +343,9 @@ function App() {
             path="reports/wastage"
             element={
               <ProtectedRoute permission="read:inventory">
-                <WastageReportPage />
+                <FeatureFlagRoute flagKey="wastage_tracking" featureName="Wastage Report">
+                  <WastageReportPage />
+                </FeatureFlagRoute>
               </ProtectedRoute>
             }
           />

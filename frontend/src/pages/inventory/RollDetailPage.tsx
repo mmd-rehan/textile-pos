@@ -8,6 +8,7 @@ import Badge from '../../components/ui/Badge';
 import Pagination from '../../components/ui/Pagination';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
+import { useFeatureFlag } from '../../hooks/useFeatureFlags';
 import { useAppStore } from '../../store/useAppStore';
 import type { RollStatus } from '../../types';
 
@@ -89,6 +90,7 @@ export default function RollDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showNotification } = useAppStore();
+  const { enabled: barcodeGenerationEnabled } = useFeatureFlag('barcode_generation');
   const [movPage, setMovPage] = useState(1);
   const [reconPage, setReconPage] = useState(1);
   const [showMarkFinished, setShowMarkFinished] = useState(false);
@@ -264,13 +266,17 @@ export default function RollDetailPage() {
             <div className="px-6 py-4 bg-gray-50 border border-gray-200 rounded-lg">
               <p className="font-mono text-2xl font-bold text-gray-900 tracking-widest">{roll.barcode}</p>
             </div>
-            <button
-              onClick={copyBarcode}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <Copy className="w-4 h-4" /> Copy
-            </button>
-            <div className="text-sm text-gray-400 italic">Barcode printing coming soon</div>
+            {barcodeGenerationEnabled && (
+              <button
+                onClick={copyBarcode}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                <Copy className="w-4 h-4" /> Copy
+              </button>
+            )}
+            {barcodeGenerationEnabled && (
+              <div className="text-sm text-gray-400 italic">Barcode printing coming soon</div>
+            )}
           </div>
         ) : (
           <p className="text-sm text-gray-500">No barcode assigned.</p>

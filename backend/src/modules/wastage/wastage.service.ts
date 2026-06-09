@@ -3,6 +3,7 @@ import { Prisma, WastageSourceType } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
 import { PrismaService } from '../../database/prisma.service';
+import { FeatureFlagsService } from '../settings/feature-flags.service';
 import { ManualWastageDto } from './dto/manual-wastage.dto';
 import { QueryWastageDto } from './dto/query-wastage.dto';
 
@@ -18,7 +19,10 @@ const WASTAGE_INCLUDE = {
 
 @Injectable()
 export class WastageService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly featureFlags: FeatureFlagsService,
+  ) {}
 
   async findAll(query: QueryWastageDto) {
     const page = query.page ?? 1;
@@ -188,6 +192,8 @@ export class WastageService {
   }
 
   async createManual(dto: ManualWastageDto, createdByUserId: string) {
+    await this.featureFlags.assertEnabled('WASTAGE_TRACKING');
+
     return this.prisma.$transaction(async (tx) => {
       const roll = await tx.roll.findUnique({
         where: { id: dto.rollId },
