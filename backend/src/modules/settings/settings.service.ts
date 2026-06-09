@@ -73,6 +73,18 @@ export class SettingsService {
     return after;
   }
 
+  async getTaxSettings(): Promise<{ taxEnabled: boolean; taxRatePercent: string; taxLabel: string }> {
+    const rows = await this.prisma.companySetting.findMany({
+      where: { key: { in: ['company_tax_enabled', 'company_tax_rate', 'company_tax_label'] } },
+    });
+    const map = new Map(rows.map((r) => [r.key, r.value]));
+    return {
+      taxEnabled: map.get('company_tax_enabled') === 'true',
+      taxRatePercent: map.get('company_tax_rate') ?? '0',
+      taxLabel: map.get('company_tax_label') ?? 'Tax',
+    };
+  }
+
   async getFeatureFlags(): Promise<Record<string, boolean>> {
     const rows = await this.prisma.featureFlag.findMany({ orderBy: { name: 'asc' } });
     return Object.fromEntries(rows.map((r) => [r.name, r.isEnabled]));

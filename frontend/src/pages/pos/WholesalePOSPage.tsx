@@ -19,6 +19,7 @@ import { customersApi } from '../../api/customers';
 import { inventoryApi } from '../../api/inventory';
 import type { CreateWholesaleSaleInput } from '../../api/sales';
 import { salesApi } from '../../api/sales';
+import { settingsApi } from '../../api/settings';
 import Modal from '../../components/ui/Modal';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
@@ -132,14 +133,25 @@ function getQtyLineSubtotal(line: WholesaleQtyCartLine) {
   return Math.max(0, qty * price - discount);
 }
 
-function getInvoiceTotals(lines: WholesaleCartLine[], payments: PaymentEntry[]) {
-  const netAmount = lines.reduce((s, l) => {
-    if (l.lineType === 'ROLL') return s + getRollLineValues(l).subTotal;
-    return s + getQtyLineSubtotal(l);
+function getInvoiceTotals(
+  lines: WholesaleCartLine[],
+  payments: PaymentEntry[],
+  taxEnabled: boolean,
+  taxRatePercent: number,
+) {
+  const subtotal = lines.reduce((s, l) => {
+    if (l.lineType === 'ROLL') return s + getRollLineValues(l).grossSubTotal;
+    const qty = parseFloat(l.quantity) || 0;
+    const price = parseFloat(l.unitPrice) || 0;
+    return s + qty * price;
   }, 0);
+  const discountTotal = lines.reduce((s, l) => s + (parseFloat(l.discountAmount) || 0), 0);
+  const taxableAmount = Math.max(0, subtotal - discountTotal);
+  const taxAmount = taxEnabled ? Math.round(taxableAmount * taxRatePercent) / 100 : 0;
+  const grandTotal = taxableAmount + taxAmount;
   const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-  const due = Math.max(0, netAmount - totalPaid);
-  return { netAmount, totalPaid, due };
+  const due = Math.max(0, grandTotal - totalPaid);
+  return { subtotal, discountTotal, taxableAmount, taxAmount, grandTotal, totalPaid, due };
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -191,6 +203,17 @@ export default function WholesalePOSPage() {
   // Pickers
   const [rollPicker, setRollPicker] = useState<RollPickerState | null>(null);
   const [stockPicker, setStockPicker] = useState<StockPickerState | null>(null);
+
+  const { data: taxSettings } = useQuery({
+    queryKey: ['settings-tax'],
+    queryFn: () => settingsApi.getTax(),
+    select: (r) => r.data,
+    staleTime: 60_000,
+  });
+
+  const taxEnabled = taxSettings?.taxEnabled ?? false;
+  const taxRatePercent = parseFloat(taxSettings?.taxRatePercent ?? '0') || 0;
+  const taxLabel = taxSettings?.taxLabel || 'Tax';
 
   const { data: customersData } = useQuery({
     queryKey: ['ws-customers-search', customerSearch],
@@ -543,7 +566,7 @@ export default function WholesalePOSPage() {
 
   function fillRemainingAsCash() {
     const allLines: WholesaleCartLine[] = [...rollLines, ...qtyLines];
-    const { due } = getInvoiceTotals(allLines, payments);
+    const { due } = getInvoiceTotals(allLines, payments, taxEnabled, taxRatePercent);
     if (due <= 0) return;
     const cashIdx = payments.findIndex((p) => p.method === 'CASH');
     if (cashIdx >= 0) {
@@ -647,7 +670,12 @@ export default function WholesalePOSPage() {
     }
   }
 
-  const { netAmount, totalPaid, due } = getInvoiceTotals(allLines, payments);
+  const { subtotal, discountTotal, taxableAmount, taxAmount, grandTotal, totalPaid, due } = getInvoiceTotals(
+    allLines,
+    payments,
+    taxEnabled,
+    taxRatePercent,
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -1213,10 +1241,24 @@ export default function WholesalePOSPage() {
           {/* Totals */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
             <div className="space-y-2">
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Items ({allLines.length})</span>
-                <span>{formatAmount(netAmount, baseCurrencyCode)}</span>
-              </div>
+              {discountTotal > 0 && (
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Subtotal</span>
+                  <span>{formatAmount(subtotal, baseCurrencyCode)}</span>
+                </div>
+              )}
+              {discountTotal > 0 && (
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Discount</span>
+                  <span className="text-orange-600">- {formatAmount(discountTotal, baseCurrencyCode)}</span>
+                </div>
+              )}
+              {taxEnabled && (
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>{taxLabel} ({taxRatePercent}%)</span>
+                  <span>{formatAmount(taxAmount, baseCurrencyCode)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Paid now</span>
                 <span className="text-green-700">{formatAmount(totalPaid, baseCurrencyCode)}</span>
@@ -1228,8 +1270,8 @@ export default function WholesalePOSPage() {
                 </div>
               )}
               <div className="flex justify-between text-base font-bold text-gray-900 border-t border-gray-100 pt-2">
-                <span>Total</span>
-                <span>{formatAmount(netAmount, baseCurrencyCode)}</span>
+                <span>Grand Total</span>
+                <span>{formatAmount(grandTotal, baseCurrencyCode)}</span>
               </div>
             </div>
 
@@ -1493,13 +1535,25 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
         {/* Summary */}
         <div className="space-y-1.5 text-sm">
           {discount > 0 && (
+            <div className="flex justify-between text-gray-500 text-xs">
+              <span>Subtotal</span>
+              <span>{formatAmount(parseFloat(invoice.totalAmount) || 0, invoiceCurrency)}</span>
+            </div>
+          )}
+          {discount > 0 && (
             <div className="flex justify-between text-gray-600">
               <span>Discount</span>
               <span>−{formatAmount(discount, invoiceCurrency)}</span>
             </div>
           )}
+          {invoice.taxEnabled && parseFloat(invoice.taxAmount) > 0 && (
+            <div className="flex justify-between text-gray-600">
+              <span>{invoice.taxLabel || 'Tax'} ({parseFloat(invoice.taxRatePercent).toFixed(2)}%)</span>
+              <span>{formatAmount(invoice.taxAmount, invoiceCurrency)}</span>
+            </div>
+          )}
           <div className="flex justify-between font-bold text-base text-gray-900 border-t border-gray-200 pt-2">
-            <span>Net Total</span>
+            <span>Grand Total</span>
             <span>{formatAmount(net, invoiceCurrency)}</span>
           </div>
         </div>

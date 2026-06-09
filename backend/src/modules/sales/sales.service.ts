@@ -260,6 +260,20 @@ export class SalesService {
           });
         }
 
+        // ── Load tax settings ─────────────────────────────────────────────────
+        const [taxEnabledSetting, taxRateSetting, taxLabelSetting] = await Promise.all([
+          tx.companySetting.findUnique({ where: { key: 'company_tax_enabled' } }),
+          tx.companySetting.findUnique({ where: { key: 'company_tax_rate' } }),
+          tx.companySetting.findUnique({ where: { key: 'company_tax_label' } }),
+        ]);
+        const taxEnabled = taxEnabledSetting?.value === 'true';
+        const taxRatePercent = new Prisma.Decimal(taxRateSetting?.value ?? '0');
+        const taxLabel = taxLabelSetting?.value || (taxEnabled ? 'Tax' : null);
+
+        if (taxEnabled && (taxRatePercent.lt(0) || taxRatePercent.gt(100))) {
+          throw AppError.badRequest('Tax rate must be between 0 and 100', 'INVALID_TAX_RATE');
+        }
+
         // ── Invoice totals ────────────────────────────────────────────────────
         const totalAmount = [
           ...processedRollLines.map((l) => l.grossSubTotal),
@@ -271,12 +285,21 @@ export class SalesService {
           ...processedQuantityLines.map((l) => l.discountAmount),
         ].reduce((s, v) => s.plus(v), new Prisma.Decimal(0)).toDecimalPlaces(2);
 
-        const netAmount = totalAmount.minus(totalDiscount).toDecimalPlaces(2);
+        const taxableAmount = totalAmount.minus(totalDiscount).toDecimalPlaces(2);
+        if (taxableAmount.lt(0)) {
+          throw AppError.badRequest('Taxable amount cannot be negative', 'NEGATIVE_TAXABLE_AMOUNT');
+        }
+
+        const taxAmount = taxEnabled
+          ? taxableAmount.times(taxRatePercent).dividedBy(100).toDecimalPlaces(2)
+          : new Prisma.Decimal(0);
+
+        const grandTotal = taxableAmount.plus(taxAmount).toDecimalPlaces(2);
 
         const totalPaid = (dto.payments ?? [])
           .reduce((s, p) => s.plus(new Prisma.Decimal(p.amount.toString())), new Prisma.Decimal(0))
           .toDecimalPlaces(2);
-        const rawDue = netAmount.minus(totalPaid);
+        const rawDue = grandTotal.minus(totalPaid);
         const dueAmount = rawDue.lt(0) ? new Prisma.Decimal(0) : rawDue.toDecimalPlaces(2);
 
         let invoiceStatus: InvoiceStatus;
@@ -301,8 +324,12 @@ export class SalesService {
             customerId: dto.customerId ?? null,
             totalAmount,
             discountAmount: totalDiscount,
-            taxAmount: new Prisma.Decimal(0),
-            netAmount,
+            taxableAmount,
+            taxEnabled,
+            taxRatePercent,
+            taxLabel: taxEnabled ? (taxLabel ?? 'Tax') : null,
+            taxAmount,
+            netAmount: grandTotal,
             paidAmount: totalPaid,
             dueAmount,
             currencyCode: baseCurrencyCode,
@@ -477,7 +504,12 @@ export class SalesService {
             newValues: JSON.stringify({
               invoiceNumber,
               customerId: dto.customerId ?? null,
-              netAmount: netAmount.toString(),
+              taxableAmount: taxableAmount.toString(),
+              taxEnabled,
+              taxRatePercent: taxRatePercent.toString(),
+              taxLabel,
+              taxAmount: taxAmount.toString(),
+              grandTotal: grandTotal.toString(),
               totalPaid: totalPaid.toString(),
               dueAmount: dueAmount.toString(),
               rollLineCount: processedRollLines.length,
@@ -697,6 +729,20 @@ export class SalesService {
           });
         }
 
+        // ── Load tax settings ─────────────────────────────────────────────────
+        const [wsTaxEnabledSetting, wsTaxRateSetting, wsTaxLabelSetting] = await Promise.all([
+          tx.companySetting.findUnique({ where: { key: 'company_tax_enabled' } }),
+          tx.companySetting.findUnique({ where: { key: 'company_tax_rate' } }),
+          tx.companySetting.findUnique({ where: { key: 'company_tax_label' } }),
+        ]);
+        const wsTaxEnabled = wsTaxEnabledSetting?.value === 'true';
+        const wsTaxRatePercent = new Prisma.Decimal(wsTaxRateSetting?.value ?? '0');
+        const wsTaxLabel = wsTaxLabelSetting?.value || (wsTaxEnabled ? 'Tax' : null);
+
+        if (wsTaxEnabled && (wsTaxRatePercent.lt(0) || wsTaxRatePercent.gt(100))) {
+          throw AppError.badRequest('Tax rate must be between 0 and 100', 'INVALID_TAX_RATE');
+        }
+
         // ── Invoice totals ────────────────────────────────────────────────────
         const totalAmount = [
           ...processedRollLines.map((l) => l.grossSubTotal),
@@ -708,12 +754,21 @@ export class SalesService {
           ...processedQuantityLines.map((l) => l.discountAmount),
         ].reduce((s, v) => s.plus(v), new Prisma.Decimal(0)).toDecimalPlaces(2);
 
-        const netAmount = totalAmount.minus(totalDiscount).toDecimalPlaces(2);
+        const wsTaxableAmount = totalAmount.minus(totalDiscount).toDecimalPlaces(2);
+        if (wsTaxableAmount.lt(0)) {
+          throw AppError.badRequest('Taxable amount cannot be negative', 'NEGATIVE_TAXABLE_AMOUNT');
+        }
+
+        const wsTaxAmount = wsTaxEnabled
+          ? wsTaxableAmount.times(wsTaxRatePercent).dividedBy(100).toDecimalPlaces(2)
+          : new Prisma.Decimal(0);
+
+        const wsGrandTotal = wsTaxableAmount.plus(wsTaxAmount).toDecimalPlaces(2);
 
         const totalPaid = (dto.payments ?? [])
           .reduce((s, p) => s.plus(new Prisma.Decimal(p.amount.toString())), new Prisma.Decimal(0))
           .toDecimalPlaces(2);
-        const rawDue = netAmount.minus(totalPaid);
+        const rawDue = wsGrandTotal.minus(totalPaid);
         const dueAmount = rawDue.lt(0) ? new Prisma.Decimal(0) : rawDue.toDecimalPlaces(2);
 
         let invoiceStatus: InvoiceStatus;
@@ -738,8 +793,12 @@ export class SalesService {
             customerId: dto.customerId,
             totalAmount,
             discountAmount: totalDiscount,
-            taxAmount: new Prisma.Decimal(0),
-            netAmount,
+            taxableAmount: wsTaxableAmount,
+            taxEnabled: wsTaxEnabled,
+            taxRatePercent: wsTaxRatePercent,
+            taxLabel: wsTaxEnabled ? (wsTaxLabel ?? 'Tax') : null,
+            taxAmount: wsTaxAmount,
+            netAmount: wsGrandTotal,
             paidAmount: totalPaid,
             dueAmount,
             currencyCode: wsBaseCurrencyCode,
@@ -911,7 +970,12 @@ export class SalesService {
             newValues: JSON.stringify({
               invoiceNumber,
               customerId: dto.customerId,
-              netAmount: netAmount.toString(),
+              taxableAmount: wsTaxableAmount.toString(),
+              taxEnabled: wsTaxEnabled,
+              taxRatePercent: wsTaxRatePercent.toString(),
+              taxLabel: wsTaxLabel,
+              taxAmount: wsTaxAmount.toString(),
+              grandTotal: wsGrandTotal.toString(),
               totalPaid: totalPaid.toString(),
               dueAmount: dueAmount.toString(),
               rollLineCount: processedRollLines.length,
@@ -1010,7 +1074,7 @@ export class SalesService {
     if (!invoice) throw AppError.notFound('Sale invoice not found', 'INVOICE_NOT_FOUND');
 
     const settings = await this.prisma.companySetting.findMany({
-      where: { key: { in: ['company_name', 'company_address', 'company_phone'] } },
+      where: { key: { in: ['company_name', 'company_address', 'company_phone', 'invoice_footer'] } },
     });
     const settingMap = new Map(settings.map((s) => [s.key, s.value]));
 
@@ -1020,6 +1084,7 @@ export class SalesService {
         name: settingMap.get('company_name') ?? 'Textile Shop',
         address: settingMap.get('company_address') ?? '',
         phone: settingMap.get('company_phone') ?? '',
+        invoiceFooter: settingMap.get('invoice_footer') ?? 'Thank you for your business!',
       },
     };
   }

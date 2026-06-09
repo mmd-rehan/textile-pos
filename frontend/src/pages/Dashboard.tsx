@@ -94,7 +94,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
             title="Today's Sales"
-            value={s ? formatAmount(s.today.netAmount, baseCurrencyCode) : '—'}
+            value={s ? formatAmount((s.today as any).grandTotal ?? s.today.netAmount, baseCurrencyCode) : '—'}
             sub={`${s?.today.invoiceCount ?? 0} invoice${s?.today.invoiceCount !== 1 ? 's' : ''}`}
             icon={ShoppingCart}
             color="bg-primary-50 text-primary-600"

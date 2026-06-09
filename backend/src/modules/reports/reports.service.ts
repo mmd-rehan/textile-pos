@@ -46,7 +46,7 @@ export class ReportsService {
     ] = await Promise.all([
       this.prisma.saleInvoice.aggregate({
         where: { createdAt: { gte: tStart, lte: tEnd } },
-        _sum: { netAmount: true, paidAmount: true },
+        _sum: { netAmount: true, paidAmount: true, taxAmount: true },
         _count: { id: true },
       }),
       this.prisma.customer.aggregate({
@@ -90,8 +90,9 @@ export class ReportsService {
     return {
       today: {
         invoiceCount: todaySales._count.id,
-        netAmount: todaySales._sum.netAmount?.toString() ?? '0',
+        grandTotal: todaySales._sum.netAmount?.toString() ?? '0',
         paidAmount: todaySales._sum.paidAmount?.toString() ?? '0',
+        taxTotal: todaySales._sum.taxAmount?.toString() ?? '0',
       },
       totalOutstandingCredit: {
         amount: totalOutstanding._sum.currentBalance?.toString() ?? '0',
@@ -147,6 +148,11 @@ export class ReportsService {
           paymentStatus: true,
           totalAmount: true,
           discountAmount: true,
+          taxableAmount: true,
+          taxEnabled: true,
+          taxRatePercent: true,
+          taxLabel: true,
+          taxAmount: true,
           netAmount: true,
           paidAmount: true,
           dueAmount: true,
@@ -161,7 +167,7 @@ export class ReportsService {
       this.prisma.saleInvoice.count({ where }),
       this.prisma.saleInvoice.aggregate({
         where,
-        _sum: { netAmount: true, paidAmount: true, dueAmount: true, discountAmount: true },
+        _sum: { netAmount: true, paidAmount: true, dueAmount: true, discountAmount: true, taxAmount: true },
         _count: { id: true },
       }),
     ]);
@@ -170,10 +176,11 @@ export class ReportsService {
       ...createPaginatedResponse(data, total, page, limit),
       totals: {
         invoiceCount: totals._count.id,
-        netAmount: totals._sum.netAmount?.toString() ?? '0',
+        grandTotal: totals._sum.netAmount?.toString() ?? '0',
         paidAmount: totals._sum.paidAmount?.toString() ?? '0',
         dueAmount: totals._sum.dueAmount?.toString() ?? '0',
         discountAmount: totals._sum.discountAmount?.toString() ?? '0',
+        taxTotal: totals._sum.taxAmount?.toString() ?? '0',
       },
     };
   }
