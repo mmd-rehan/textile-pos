@@ -61,15 +61,27 @@ function CompanyTab({ initial }: { initial: Record<string, string> }) {
     company_email: initial.company_email ?? '',
     company_currency: initial.company_currency ?? 'PKR',
     company_timezone: initial.company_timezone ?? 'Asia/Karachi',
+    company_tax_enabled: initial.company_tax_enabled ?? 'false',
     company_tax_rate: initial.company_tax_rate ?? '0',
     company_tax_label: initial.company_tax_label ?? 'Tax',
   });
 
   const mut = useMutation({
-    mutationFn: () => settingsApi.updateCompany(form),
+    mutationFn: () => {
+      const taxEnabled = form.company_tax_enabled === 'true';
+      const rate = parseFloat(form.company_tax_rate);
+      if (taxEnabled && (isNaN(rate) || rate < 0 || rate > 100)) {
+        throw new Error('Tax rate must be between 0 and 100');
+      }
+      if (taxEnabled && !form.company_tax_label.trim()) {
+        throw new Error('Tax label is required when tax is enabled');
+      }
+      return settingsApi.updateCompany(form);
+    },
     onSuccess: () => {
-      // Invalidate everything that shows currency labels or base currency amounts
+      // Invalidate everything that shows currency/tax labels or base currency amounts
       qc.invalidateQueries({ queryKey: ['settings-company'] });
+      qc.invalidateQueries({ queryKey: ['settings-tax'] });
       qc.invalidateQueries({ queryKey: ['currencies-all'] });
       qc.invalidateQueries({ queryKey: ['currencies-exchange-rates'] });
       qc.invalidateQueries({ queryKey: ['dashboard-summary'] });
@@ -79,7 +91,7 @@ function CompanyTab({ initial }: { initial: Record<string, string> }) {
       qc.invalidateQueries({ queryKey: ['report-sales-products'] });
       showNotification('Company settings saved.', 'success');
     },
-    onError: () => showNotification('Failed to save settings.', 'error'),
+    onError: (err: any) => showNotification(err?.message ?? 'Failed to save settings.', 'error'),
   });
 
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
@@ -120,12 +132,52 @@ function CompanyTab({ initial }: { initial: Record<string, string> }) {
       </Section>
 
       <Section title="Tax">
-        <Field label="Tax Rate (%)" hint="Applied to invoices if tax is enabled">
-          <input className={inputCls} type="number" min="0" step="0.01" value={form.company_tax_rate} onChange={(e) => set('company_tax_rate', e.target.value)} />
+        <Field label="Tax Enabled" hint="When enabled, tax is calculated on every new invoice">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => set('company_tax_enabled', form.company_tax_enabled === 'true' ? 'false' : 'true')}
+              className={`relative inline-flex w-11 h-6 rounded-full transition-colors focus:outline-none ${
+                form.company_tax_enabled === 'true' ? 'bg-primary-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform mt-0.5 ${
+                  form.company_tax_enabled === 'true' ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+            <span className="text-sm text-gray-700">
+              {form.company_tax_enabled === 'true' ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
         </Field>
         <Field label="Tax Label" hint='Label shown on invoices (e.g. "GST", "VAT")'>
-          <input className={inputCls} value={form.company_tax_label} onChange={(e) => set('company_tax_label', e.target.value)} />
+          <input
+            className={inputCls}
+            value={form.company_tax_label}
+            onChange={(e) => set('company_tax_label', e.target.value)}
+            placeholder="e.g. VAT, GST, Tax"
+          />
         </Field>
+        <Field label="Tax Rate (%)" hint="Applied to every new invoice. 0–100. Historical invoices keep their saved rate.">
+          <input
+            className={inputCls}
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            value={form.company_tax_rate}
+            onChange={(e) => set('company_tax_rate', e.target.value)}
+            disabled={form.company_tax_enabled !== 'true'}
+          />
+        </Field>
+        {form.company_tax_enabled === 'true' && (
+          <div className="mt-1 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+            Tax is <strong>exclusive</strong> — {form.company_tax_label || 'Tax'} ({form.company_tax_rate}%) will be
+            added on top of the invoice subtotal. Existing invoices are not affected.
+          </div>
+        )}
       </Section>
 
       <div className="flex justify-end">

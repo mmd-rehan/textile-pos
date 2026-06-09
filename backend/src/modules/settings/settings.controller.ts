@@ -45,6 +45,12 @@ export class SettingsController {
     return createSuccessResponse(data);
   }
 
+  @Get('tax')
+  async getTaxSettings() {
+    const data = await this.settingsService.getTaxSettings();
+    return createSuccessResponse(data);
+  }
+
   @Get('flags')
   @RequirePermissions('read:settings')
   async getFeatureFlags() {

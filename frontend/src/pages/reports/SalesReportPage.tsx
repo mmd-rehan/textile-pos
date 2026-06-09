@@ -141,10 +141,11 @@ export default function SalesReportPage() {
         <>
           {/* Totals summary */}
           {invoices?.totals && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {[
                 { label: 'Invoices', value: String(invoices.totals.invoiceCount) },
-                { label: 'Net Total', value: formatAmount(invoices.totals.netAmount, baseCurrencyCode) },
+                { label: 'Grand Total', value: formatAmount(invoices.totals.grandTotal ?? invoices.totals.netAmount, baseCurrencyCode) },
+                { label: 'Tax Collected', value: formatAmount(invoices.totals.taxTotal ?? '0', baseCurrencyCode) },
                 { label: 'Collected', value: formatAmount(invoices.totals.paidAmount, baseCurrencyCode) },
                 { label: 'Outstanding', value: formatAmount(invoices.totals.dueAmount, baseCurrencyCode) },
               ].map(({ label, value }) => (

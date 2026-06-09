@@ -16,10 +16,12 @@ export interface DashboardSummary {
 
 export interface SalesReportTotals {
   invoiceCount: number;
-  netAmount: string;
+  grandTotal: string;
+  netAmount?: string;
   paidAmount: string;
   dueAmount: string;
   discountAmount: string;
+  taxTotal: string;
 }
 
 export interface MonthlySummaryRow {

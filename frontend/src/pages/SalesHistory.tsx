@@ -220,15 +220,32 @@ function SaleDetailModal({ id, onClose }: { id: string; onClose: () => void }) {
 
         {/* Totals */}
         <div className="flex justify-end">
-          <div className="w-64 space-y-1 text-sm">
+          <div className="w-72 space-y-1 text-sm">
+            {parseFloat(invoice.discountAmount) > 0 && (
+              <div className="flex justify-between text-gray-500 text-xs">
+                <span>Subtotal</span>
+                <span className="font-mono">{formatAmount(invoice.totalAmount, currency)}</span>
+              </div>
+            )}
             {parseFloat(invoice.discountAmount) > 0 && (
               <div className="flex justify-between text-gray-600">
                 <span>Discount</span>
                 <span className="font-mono">- {formatAmount(invoice.discountAmount, currency)}</span>
               </div>
             )}
+            {invoice.taxEnabled && (
+              <div className="flex justify-between text-gray-600">
+                <span>
+                  {invoice.taxLabel || 'Tax'}
+                  {parseFloat(invoice.taxRatePercent) > 0 && (
+                    <span className="text-gray-400 ml-1 text-xs">({parseFloat(invoice.taxRatePercent).toFixed(2)}%)</span>
+                  )}
+                </span>
+                <span className="font-mono">{formatAmount(invoice.taxAmount, currency)}</span>
+              </div>
+            )}
             <div className="flex justify-between font-semibold text-gray-900 border-t pt-1">
-              <span>Total</span>
+              <span>Grand Total</span>
               <span className="font-mono">{formatAmount(invoice.netAmount, currency)}</span>
             </div>
             {(invoice.salePayments ?? []).map((p) => (

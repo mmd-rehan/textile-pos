@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { customersApi } from '../../api/customers';
 import { inventoryApi } from '../../api/inventory';
 import { salesApi } from '../../api/sales';
+import { settingsApi } from '../../api/settings';
 import Modal from '../../components/ui/Modal';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
@@ -127,14 +128,27 @@ function getQtyLineSubtotal(line: QuantityCartLine) {
   return Math.max(0, qty * price - discount);
 }
 
-function getInvoiceTotals(lines: CartLine[], payments: PaymentEntry[]) {
-  const netAmount = lines.reduce((s, l) => {
-    if (l.lineType === 'ROLL') return s + getRollLineValues(l).subTotal;
-    return s + getQtyLineSubtotal(l);
+function getInvoiceTotals(
+  lines: CartLine[],
+  payments: PaymentEntry[],
+  taxEnabled: boolean,
+  taxRatePercent: number,
+) {
+  const subtotal = lines.reduce((s, l) => {
+    if (l.lineType === 'ROLL') return s + getRollLineValues(l).grossSubTotal;
+    const qty = parseFloat(l.quantity) || 0;
+    const price = parseFloat(l.unitPrice) || 0;
+    return s + qty * price;
   }, 0);
+  const discountTotal = lines.reduce((s, l) => {
+    return s + (parseFloat(l.discountAmount) || 0);
+  }, 0);
+  const taxableAmount = Math.max(0, subtotal - discountTotal);
+  const taxAmount = taxEnabled ? Math.round(taxableAmount * taxRatePercent) / 100 : 0;
+  const grandTotal = taxableAmount + taxAmount;
   const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-  const due = Math.max(0, netAmount - totalPaid);
-  return { netAmount, totalPaid, due };
+  const due = Math.max(0, grandTotal - totalPaid);
+  return { subtotal, discountTotal, taxableAmount, taxAmount, grandTotal, totalPaid, due };
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -172,6 +186,17 @@ export default function RetailPOSPage() {
 
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
+
+  const { data: taxSettings } = useQuery({
+    queryKey: ['settings-tax'],
+    queryFn: () => settingsApi.getTax(),
+    select: (r) => r.data,
+    staleTime: 60_000,
+  });
+
+  const taxEnabled = taxSettings?.taxEnabled ?? false;
+  const taxRatePercent = parseFloat(taxSettings?.taxRatePercent ?? '0') || 0;
+  const taxLabel = taxSettings?.taxLabel || 'Tax';
 
   const { data: customersData } = useQuery({
     queryKey: ['customers-search', customerSearch],
@@ -489,7 +514,7 @@ export default function RetailPOSPage() {
   }
 
   function fillRemainingAsCash() {
-    const { due } = getInvoiceTotals(cartLines, payments);
+    const { due } = getInvoiceTotals(cartLines, payments, taxEnabled, taxRatePercent);
     if (due <= 0) return;
     const cashIdx = payments.findIndex((p) => p.method === 'CASH');
     if (cashIdx >= 0) {
@@ -575,7 +600,12 @@ export default function RetailPOSPage() {
     }
   }
 
-  const { netAmount, totalPaid, due } = getInvoiceTotals(cartLines, payments);
+  const { subtotal, discountTotal, taxableAmount, taxAmount, grandTotal, totalPaid, due } = getInvoiceTotals(
+    cartLines,
+    payments,
+    taxEnabled,
+    taxRatePercent,
+  );
 
   return (
     <div className="flex flex-col gap-4 h-full" onClick={() => refocusBarcode()}>
@@ -1063,9 +1093,27 @@ export default function RetailPOSPage() {
             ))}
 
             <div className="border-t border-gray-100 pt-3 space-y-1.5">
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Total</span>
-                <span className="font-mono">{formatAmount(netAmount, baseCurrencyCode)}</span>
+              {discountTotal > 0 && (
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Subtotal</span>
+                  <span className="font-mono">{formatAmount(subtotal, baseCurrencyCode)}</span>
+                </div>
+              )}
+              {discountTotal > 0 && (
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Discount</span>
+                  <span className="font-mono text-orange-600">- {formatAmount(discountTotal, baseCurrencyCode)}</span>
+                </div>
+              )}
+              {taxEnabled && (
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>{taxLabel} ({taxRatePercent}%)</span>
+                  <span className="font-mono">{formatAmount(taxAmount, baseCurrencyCode)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-semibold text-gray-900 border-t border-gray-100 pt-1">
+                <span>Grand Total</span>
+                <span className="font-mono">{formatAmount(grandTotal, baseCurrencyCode)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Paid</span>
@@ -1073,7 +1121,7 @@ export default function RetailPOSPage() {
               </div>
               <div className={`flex justify-between text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 <span>{due > 0 ? 'Due' : 'Change'}</span>
-                <span className="font-mono">{formatAmount(Math.abs(totalPaid - netAmount), baseCurrencyCode)}</span>
+                <span className="font-mono">{formatAmount(Math.abs(totalPaid - grandTotal), baseCurrencyCode)}</span>
               </div>
               {due > 0 && (
                 <button
@@ -1327,11 +1375,23 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
           <div className="border-t border-gray-200 pt-3 space-y-1 text-xs">
             {parseFloat(invoice.discountAmount) > 0 && (
               <div className="flex justify-between text-gray-600">
+                <span>Subtotal</span>
+                <span className="font-mono">{formatAmount(invoice.totalAmount, invoiceCurrency)}</span>
+              </div>
+            )}
+            {parseFloat(invoice.discountAmount) > 0 && (
+              <div className="flex justify-between text-gray-600">
                 <span>Discount</span>
                 <span className="font-mono">- {formatAmount(invoice.discountAmount, invoiceCurrency)}</span>
               </div>
             )}
-            <div className="flex justify-between font-bold text-gray-900">
+            {invoice.taxEnabled && parseFloat(invoice.taxAmount) > 0 && (
+              <div className="flex justify-between text-gray-600">
+                <span>{invoice.taxLabel || 'Tax'} ({parseFloat(invoice.taxRatePercent).toFixed(2)}%)</span>
+                <span className="font-mono">{formatAmount(invoice.taxAmount, invoiceCurrency)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-gray-900 border-t border-gray-100 pt-1">
               <span>Total</span>
               <span className="font-mono">{formatAmount(invoice.netAmount, invoiceCurrency)}</span>
             </div>
@@ -1341,7 +1401,7 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
             <div className="border-t border-gray-200 pt-3 space-y-1 text-xs">
               {invoice.salePayments.map((p) => (
                 <div key={p.id} className="flex justify-between text-gray-600">
-                  <span>{p.paymentMethod.replace('_', ' ')}</span>
+                  <span>{p.paymentMethod.replace(/_/g, ' ')}</span>
                   <span className="font-mono text-green-600">{formatAmount(p.amount, invoiceCurrency)}</span>
                 </div>
               ))}
@@ -1355,7 +1415,7 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
           )}
 
           <div className="border-t border-gray-200 pt-3 text-center text-xs text-gray-400">
-            Thank you for your business!
+            {data.company.invoiceFooter || 'Thank you for your business!'}
           </div>
         </div>
       </div>

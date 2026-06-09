@@ -608,6 +608,10 @@ export interface SaleInvoice {
   currencyCode: string;
   totalAmount: string;
   discountAmount: string;
+  taxableAmount: string;
+  taxEnabled: boolean;
+  taxRatePercent: string;
+  taxLabel?: string | null;
   taxAmount: string;
   netAmount: string;
   paidAmount: string;
@@ -629,7 +633,7 @@ export interface SaleInvoice {
 
 export interface ReceiptData {
   invoice: SaleInvoice;
-  company: { name: string; address: string; phone: string };
+  company: { name: string; address: string; phone: string; invoiceFooter?: string };
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
@@ -661,6 +665,7 @@ export interface CompanySettings {
   company_email?: string;
   company_currency?: string;
   company_timezone?: string;
+  company_tax_enabled?: string;
   company_tax_rate?: string;
   company_tax_label?: string;
 }
