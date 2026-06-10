@@ -238,8 +238,9 @@ export class ProductsService {
   async createColor(dto: CreateColorDto) {
     const existing = await this.prisma.color.findUnique({ where: { name: dto.name } });
     if (existing) throw AppError.conflict('Color name already exists', 'COLOR_EXISTS');
+    const hexCode = dto.hexCode ? dto.hexCode.toUpperCase() : undefined;
     return this.prisma.color.create({
-      data: { name: dto.name, colorCode: dto.colorCode, hexCode: dto.hexCode },
+      data: { name: dto.name, colorCode: dto.colorCode, hexCode },
     });
   }
 
@@ -249,9 +250,10 @@ export class ProductsService {
       const existing = await this.prisma.color.findFirst({ where: { name: dto.name, NOT: { id } } });
       if (existing) throw AppError.conflict('Color name already exists', 'COLOR_EXISTS');
     }
+    const hexCode = dto.hexCode ? dto.hexCode.toUpperCase() : dto.hexCode;
     return this.prisma.color.update({
       where: { id },
-      data: { name: dto.name, colorCode: dto.colorCode, hexCode: dto.hexCode, isActive: dto.isActive },
+      data: { name: dto.name, colorCode: dto.colorCode, hexCode, isActive: dto.isActive },
     });
   }
 
