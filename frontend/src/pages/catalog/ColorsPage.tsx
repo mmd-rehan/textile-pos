@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Palette, Pencil, Plus, Search, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useRef, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -10,12 +10,20 @@ import Modal from '../../components/ui/Modal';
 import { useColors, useCreateColor, useDeleteColor, useUpdateColor } from '../../hooks/useColors';
 import type { Color, CreateColorForm } from '../../types';
 
+function normalizeHexColor(value: string): string {
+  return value.toUpperCase();
+}
+
+function isValidHexColor(value: string): boolean {
+  return /^#[0-9A-F]{6}$/.test(value);
+}
+
 const schema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   colorCode: z.string().max(20).optional(),
   hexCode: z
     .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #FF5733)')
+    .regex(/^#[0-9A-F]{6}$/, 'Must be a valid hex color (e.g. #FF5733)')
     .optional()
     .or(z.literal('')),
 });
@@ -31,20 +39,45 @@ export default function ColorsPage() {
   const update = useUpdateColor();
   const del = useDeleteColor();
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
+  const lastPickerHex = useRef('');
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    getValues,
+    control,
+    formState: { errors },
+  } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
+  const hexCode = watch('hexCode') ?? '';
+
   function openCreate() {
     setEditing(null);
+    lastPickerHex.current = '';
     reset({ name: '', colorCode: '', hexCode: '' });
     setModalOpen(true);
   }
 
   function openEdit(color: Color) {
     setEditing(color);
+    lastPickerHex.current = color.hexCode ?? '';
     reset({ name: color.name, colorCode: color.colorCode ?? '', hexCode: color.hexCode ?? '' });
     setModalOpen(true);
+  }
+
+  function handlePickerChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const newHex = normalizeHexColor(e.target.value);
+    const currentCode = getValues('colorCode') ?? '';
+    if (!currentCode || currentCode === lastPickerHex.current) {
+      setValue('colorCode', newHex, { shouldValidate: false, shouldDirty: true });
+    }
+    lastPickerHex.current = newHex;
+    setValue('hexCode', newHex, { shouldValidate: true, shouldDirty: true });
   }
 
   async function onSubmit(data: FormData) {
@@ -175,23 +208,60 @@ export default function ColorsPage() {
             </label>
             <Input {...register('name')} placeholder="e.g. Royal Blue" error={errors.name?.message} />
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Color Code</label>
-              <Input {...register('colorCode')} placeholder="e.g. RB-001" error={errors.colorCode?.message} />
+              <Controller
+                name="colorCode"
+                control={control}
+                render={({ field }) => (
+                  <Input
+                    {...field}
+                    value={field.value ?? ''}
+                    placeholder="e.g. RB-001"
+                    error={errors.colorCode?.message}
+                  />
+                )}
+              />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Hex Code</label>
               <div className="flex items-center gap-2">
-                <Input
-                  {...register('hexCode')}
-                  placeholder="#4169E1"
-                  error={errors.hexCode?.message}
-                  className="flex-1"
+                <input
+                  type="color"
+                  value={isValidHexColor(hexCode) ? hexCode.toLowerCase() : '#000000'}
+                  onChange={handlePickerChange}
+                  className="h-9 w-10 shrink-0 cursor-pointer rounded border border-gray-300 p-0.5"
+                  title="Pick a color"
+                />
+                <span
+                  className="h-8 w-8 shrink-0 rounded border border-gray-200"
+                  style={{ backgroundColor: isValidHexColor(hexCode) ? hexCode : 'transparent' }}
+                />
+                <Controller
+                  name="hexCode"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      {...field}
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(normalizeHexColor(e.target.value))}
+                      placeholder="#4169E1"
+                      className={`min-w-0 flex-1 rounded-lg border px-3 py-2 font-mono text-sm bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                        errors.hexCode ? 'border-red-400 focus:ring-red-400' : 'border-gray-300'
+                      }`}
+                    />
+                  )}
                 />
               </div>
+              {errors.hexCode && (
+                <p className="mt-1 text-xs text-red-500">{errors.hexCode.message}</p>
+              )}
             </div>
           </div>
+
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => { setModalOpen(false); reset(); }}>
               Cancel
