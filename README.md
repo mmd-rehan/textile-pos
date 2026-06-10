@@ -83,20 +83,52 @@ Below is the database relationship model. All transactions, stock movements, and
 erDiagram
     User ||--o{ AuditLog : "creates"
     User ||--o{ InventoryMovement : "records"
+    User ||--o{ RollReconciliation : "performs"
+    User ||--o{ SaleInvoice : "cashiers"
+    User ||--o{ SalePayment : "collects"
+    User ||--o{ CustomerPayment : "receives"
+    User ||--o{ WastageEntry : "logs"
+
     Product ||--o{ Roll : "contains"
     Product ||--o{ ProductStockItem : "tracks"
     Product ||--o{ InventoryMovement : "moves"
+    Product ||--o{ SaleInvoiceItem : "sold_in"
+    Product ||--o{ PurchaseItem : "ordered_in"
+
     Roll ||--o{ InventoryMovement : "moves"
     Roll ||--o{ RollReconciliation : "reconciles"
     Roll ||--o{ Remnant : "creates"
+    Roll ||--o{ PurchaseRoll : "bought_in"
+    Roll ||--o{ WastageEntry : "wastes"
+
+    ProductStockItem ||--o{ InventoryMovement : "moves"
+    ProductStockItem ||--o{ PurchaseItem : "bought_in"
+
     Customer ||--o{ SaleInvoice : "buys"
     Customer ||--o{ CustomerLedgerEntry : "has"
+    Customer ||--o{ CustomerPayment : "makes"
+
     Supplier ||--o{ PurchaseOrder : "supplies"
     Supplier ||--o{ SupplierLedgerEntry : "has"
+    Supplier ||--o{ SupplierPayment : "receives"
+
+    PurchaseOrder ||--|{ PurchaseItem : "details"
+    PurchaseOrder ||--o{ PurchaseRoll : "rolls"
     PurchaseOrder ||--o{ SupplierPayment : "pays"
-    SaleInvoice ||--o{ SaleInvoiceItem : "details"
+
+    SaleInvoice ||--|{ SaleInvoiceItem : "details"
     SaleInvoice ||--o{ SalePayment : "pays"
-    SaleInvoiceItem ||--o? Roll : "deducts"
+    SaleInvoice ||--o{ WastageEntry : "wastes"
+
+    SaleInvoiceItem }o--o| Roll : "deducts"
+    SaleInvoiceItem }o--o| ProductStockItem : "deducts"
+
+    PurchaseItem }o--o| ProductStockItem : "deducts"
+
+    RollReconciliation ||--o| Remnant : "creates"
+    RollReconciliation ||--o{ WastageEntry : "wastes"
+
+    Currency ||--o{ CurrencyExchangeRate : "has_rates"
 ```
 
 ---
