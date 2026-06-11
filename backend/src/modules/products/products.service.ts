@@ -396,6 +396,71 @@ export class ProductsService {
     });
   }
 
+  // ── Purchase Product Search ───────────────────────────────────────
+
+  async searchForPurchase(query: {
+    search?: string;
+    productType?: string;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(query.pageSize ?? 20, 50);
+    const skip = (page - 1) * limit;
+    const s = query.search?.trim();
+
+    const where: Prisma.ProductWhereInput = { status: 'ACTIVE' };
+    if (query.productType) where.productType = query.productType as Prisma.EnumProductTypeFilter;
+    if (s) {
+      where.OR = [
+        { name: { contains: s } },
+        { productCode: { contains: s } },
+        { barcode: { contains: s } },
+        { category: { name: { contains: s } } },
+        { brand: { is: { name: { contains: s } } } },
+        { color: { is: { name: { contains: s } } } },
+        { color: { is: { colorCode: { contains: s } } } },
+        { design: { is: { name: { contains: s } } } },
+        { design: { is: { designCode: { contains: s } } } },
+      ];
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        select: {
+          id: true,
+          productCode: true,
+          name: true,
+          barcode: true,
+          productType: true,
+          retailPrice: true,
+          wholesalePrice: true,
+          category: { select: { id: true, name: true } },
+          brand: { select: { id: true, name: true } },
+          color: { select: { id: true, name: true, colorCode: true } },
+          design: { select: { id: true, name: true, designCode: true } },
+          defaultUnit: { select: { id: true, name: true, abbreviation: true } },
+        },
+        skip,
+        take: limit,
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    // Promote exact barcode/code matches to the top
+    if (s) {
+      rows.sort((a, b) => {
+        const aExact = a.barcode === s || a.productCode === s ? 1 : 0;
+        const bExact = b.barcode === s || b.productCode === s ? 1 : 0;
+        return bExact - aExact;
+      });
+    }
+
+    return createPaginatedResponse(rows, total, page, limit);
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────
 
   private async validateForeignKeys(dto: Partial<CreateProductDto>) {

@@ -9,6 +9,16 @@ import { createSuccessResponse } from '../../common/utils/response';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { ProductType } from '@prisma/client';
+import { Type } from 'class-transformer';
+
+class SearchForPurchaseDto {
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsEnum(ProductType) productType?: ProductType;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) pageSize?: number;
+}
 
 @Controller('products')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -27,6 +37,12 @@ export class ProductsController {
   async posSearch(@Query('search') search: string, @Query('limit') limit?: string) {
     const data = await this.productsService.posSearch(search, limit ? parseInt(limit, 10) : 10);
     return createSuccessResponse(data);
+  }
+
+  @Get('search-for-purchase')
+  @RequirePermissions('read:products')
+  async searchForPurchase(@Query() query: SearchForPurchaseDto) {
+    return this.productsService.searchForPurchase(query);
   }
 
   @Get(':id')

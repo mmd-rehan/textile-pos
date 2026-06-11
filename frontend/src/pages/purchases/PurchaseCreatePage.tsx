@@ -4,18 +4,19 @@ import { useEffect, useState } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { batchesApi } from '../../api/batches';
-import { colorsApi, designsApi, productsApi } from '../../api/products';
+import { currenciesApi } from '../../api/currencies';
+import { colorsApi, designsApi, type PurchaseProductSearchResult } from '../../api/products';
 import { purchasesApi } from '../../api/purchases';
 import { suppliersApi } from '../../api/suppliers';
+import PurchaseProductPicker from '../../components/purchases/PurchaseProductPicker';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
-import { currenciesApi } from '../../api/currencies';
 import { CURRENCIES, formatAmount, getCurrency } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { COLORS_KEY } from '../../hooks/useColors';
 import { DESIGNS_KEY } from '../../hooks/useDesigns';
 import { useAppStore } from '../../store/useAppStore';
-import type { Color, Design, Product } from '../../types';
+import type { Color, Design } from '../../types';
 
 type RowType = 'ROLL' | 'ITEM';
 
@@ -85,10 +86,6 @@ export default function PurchaseCreatePage() {
     queryKey: ['suppliers-select'],
     queryFn: () => suppliersApi.getAll({ limit: 200 }),
   });
-  const { data: productsData } = useQuery({
-    queryKey: ['products-select'],
-    queryFn: () => productsApi.getAll({ limit: 500, status: 'ACTIVE' }),
-  });
   const { data: batchesData } = useQuery({
     queryKey: ['batches-select'],
     queryFn: () => batchesApi.getAll({ limit: 200 }),
@@ -105,12 +102,9 @@ export default function PurchaseCreatePage() {
   });
 
   const suppliers = suppliersData?.data ?? [];
-  const products: Product[] = productsData?.data ?? [];
   const batches = batchesData?.data ?? [];
   const allColors: Color[] = colorsData ?? [];
   const allDesigns: Design[] = designsData ?? [];
-
-  const productTypeMap = new Map(products.map((p) => [p.id, p.productType]));
 
   const { register, control, handleSubmit, setValue, formState: { errors } } = useForm<PurchaseForm>({
     defaultValues: {
@@ -152,7 +146,7 @@ export default function PurchaseCreatePage() {
       } else {
         setValue('exchangeRate', '1');
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }, [selectedCurrencyCode, baseCurrencyCode, setValue]);
 
   // Total cost calculation across both row types
@@ -257,18 +251,10 @@ export default function PurchaseCreatePage() {
     },
   });
 
-  // Determine row type from selected product
-  function getRowTypeForProduct(productId: string): RowType {
-    const type = productTypeMap.get(productId);
-    return type === 'FABRIC_ROLL' ? 'ROLL' : 'ITEM';
-  }
-
-  function handleProductChange(index: number, productId: string) {
-    setValue(`rows.${index}.productId`, productId);
-    if (productId) {
-      const rowType = getRowTypeForProduct(productId);
-      setValue(`rows.${index}.rowType`, rowType);
-    }
+  function handleProductSelect(index: number, product: PurchaseProductSearchResult) {
+    setValue(`rows.${index}.productId`, product.id);
+    const rowType: RowType = product.productType === 'FABRIC_ROLL' ? 'ROLL' : 'ITEM';
+    setValue(`rows.${index}.rowType`, rowType);
   }
 
   const rollCount = watchedRows?.filter((r) => r?.rowType === 'ROLL').length ?? 0;
@@ -489,11 +475,10 @@ export default function PurchaseCreatePage() {
                 <div key={field.id} className={`p-4 ${isRoll ? 'bg-blue-50/30' : 'bg-amber-50/30'}`}>
                   {/* Row type badge */}
                   <div className="flex items-center gap-2 mb-3">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      isRoll
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isRoll
                         ? 'bg-blue-100 text-blue-700'
                         : 'bg-amber-100 text-amber-700'
-                    }`}>
+                      }`}>
                       {isRoll ? 'Fabric Roll' : 'Quantity Item'}
                     </span>
                     {sub > 0 && (
@@ -514,24 +499,21 @@ export default function PurchaseCreatePage() {
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {/* Product selection */}
-                    <div className="md:col-span-2">
+                    <div className="md:col-span-4">
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         Product <span className="text-red-500">*</span>
                       </label>
-                      <select
+                      <input
+                        type="hidden"
                         {...register(`rows.${index}.productId`, { required: true })}
-                        onChange={(e) => handleProductChange(index, e.target.value)}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      >
-                        <option value="">Select product…</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            [{p.productType === 'FABRIC_ROLL' ? 'Roll' : p.productType === 'FIXED_PRODUCT' ? 'Fixed' : 'Cut'}] {p.name}
-                          </option>
-                        ))}
-                      </select>
+                      />
+                      <PurchaseProductPicker
+                        value={watchedRows?.[index]?.productId ?? ''}
+                        onSelect={(product) => handleProductSelect(index, product)}
+                        error={!!errors.rows?.[index]?.productId}
+                      />
                       {errors.rows?.[index]?.productId && (
-                        <p className="text-xs text-red-600 mt-0.5">Required</p>
+                        <p className="text-xs text-red-600 mt-0.5">Product is required</p>
                       )}
                     </div>
 

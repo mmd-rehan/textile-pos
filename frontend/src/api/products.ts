@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { Color, Design, Product, ProductStockItem, CreateProductForm, CreateColorForm, CreateDesignForm } from '../types';
+import type { Color, Design, Product, ProductStockItem, CreateProductForm, CreateColorForm, CreateDesignForm, ProductType } from '../types';
 
 export interface ProductQuery {
   page?: number;
@@ -11,9 +11,32 @@ export interface ProductQuery {
   brandId?: string;
 }
 
+export interface PurchaseProductSearchResult {
+  id: string;
+  productCode: string;
+  name: string;
+  barcode?: string | null;
+  productType: ProductType;
+  retailPrice: string;
+  wholesalePrice: string;
+  category?: { id: string; name: string };
+  brand?: { id: string; name: string } | null;
+  color?: { id: string; name: string; colorCode?: string | null } | null;
+  design?: { id: string; name: string; designCode?: string | null } | null;
+  defaultUnit?: { id: string; name: string; abbreviation: string };
+}
+
 export const productsApi = {
   getAll: (params: ProductQuery = {}): Promise<{ data: Product[]; meta: any }> =>
     apiClient.get('/products', { params }),
+
+  searchForPurchase: (params: {
+    search?: string;
+    productType?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}): Promise<{ data: PurchaseProductSearchResult[]; meta: any }> =>
+    apiClient.get('/products/search-for-purchase', { params }),
 
   getOne: (id: string): Promise<{ data: Product }> =>
     apiClient.get(`/products/${id}`),
