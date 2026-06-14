@@ -106,6 +106,11 @@ enum CustomerStatus {
   INACTIVE
 }
 
+enum AttachmentStatus {
+  ACTIVE
+  DELETED
+}
+
 // ==========================================
 // CURRENCY MODEL
 // ==========================================
@@ -170,6 +175,7 @@ model User {
   saleInvoices               SaleInvoice[]        @relation("CashierInvoices")
   salePayments               SalePayment[]        @relation("ReceivedByPayments")
   customerPayments           CustomerPayment[]    @relation("ReceivedByCustomerPayments")
+  purchaseAttachments        PurchaseAttachment[] @relation("UploadedByAttachments")
 
   @@map("users")
 }
@@ -838,6 +844,7 @@ model Supplier {
   purchaseOrders        PurchaseOrder[]
   supplierLedgerEntries SupplierLedgerEntry[]
   supplierPayments      SupplierPayment[]
+  purchaseAttachments   PurchaseAttachment[]
 
   @@map("suppliers")
 }
@@ -866,10 +873,11 @@ model PurchaseOrder {
   createdAt                  DateTime      @default(now()) @map("created_at")
   updatedAt                  DateTime      @updatedAt @map("updated_at")
 
-  supplier         Supplier          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplier         Supplier             @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   purchaseItems    PurchaseItem[]
   purchaseRolls    PurchaseRoll[]
   supplierPayments SupplierPayment[]
+  attachments      PurchaseAttachment[]
 
   @@index([poNumber])
   @@index([createdAt])
@@ -981,4 +989,32 @@ model SupplierLedgerEntry {
   @@index([supplierId])
   @@index([supplierId, referenceType, referenceId], name: "supp_ledger_ref_idx")
   @@map("supplier_ledger_entries")
+}
+
+// ==========================================
+// PURCHASE ATTACHMENTS
+// ==========================================
+
+model PurchaseAttachment {
+  id                String           @id @default(uuid())
+  purchaseOrderId   String           @map("purchase_order_id")
+  supplierId        String           @map("supplier_id")
+  originalFileName  String           @map("original_file_name")
+  storedFileName    String           @unique @map("stored_file_name")
+  storagePath       String           @map("storage_path")
+  mimeType          String           @map("mime_type")
+  fileSize          Int              @map("file_size")
+  fileHash          String?          @map("file_hash")
+  uploadedByUserId  String           @map("uploaded_by_user_id")
+  status            AttachmentStatus @default(ACTIVE)
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  uploadedBy    User          @relation("UploadedByAttachments", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseOrderId])
+  @@index([supplierId])
+  @@map("purchase_attachments")
 }

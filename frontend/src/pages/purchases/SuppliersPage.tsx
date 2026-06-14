@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Edit2, Plus, Search, Trash2, X } from 'lucide-react';
+import { Edit2, FileSpreadsheet, Plus, Search, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { suppliersApi } from '../../api/suppliers';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
@@ -9,6 +10,7 @@ import Pagination from '../../components/ui/Pagination';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { useAppStore } from '../../store/useAppStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import type { Supplier } from '../../types';
 
 interface SupplierForm {
@@ -22,6 +24,9 @@ interface SupplierForm {
 export default function SuppliersPage() {
   const { showNotification } = useAppStore();
   const { code: baseCurrencyCode } = useBaseCurrency();
+  const { hasPermission } = useAuthStore();
+  const canViewStatement = hasPermission('suppliers.view_statement');
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -164,6 +169,15 @@ export default function SuppliersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        {canViewStatement && (
+                          <button
+                            onClick={() => navigate(`/purchases/suppliers/${s.id}/statement`)}
+                            title="Account statement"
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded"
+                          >
+                            <FileSpreadsheet className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => openEdit(s)}
                           className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded"

@@ -1,6 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Banknote, Barcode, CreditCard, Package, Plus } from 'lucide-react';
-import { useState } from 'react';
+import {
+  ArrowLeft,
+  Banknote,
+  Barcode,
+  CreditCard,
+  Download,
+  FileText,
+  Image as ImageIcon,
+  Package,
+  Paperclip,
+  Plus,
+  Upload,
+  User as UserIcon,
+} from 'lucide-react';
+import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { purchasesApi } from '../../api/purchases';
 import Badge from '../../components/ui/Badge';
@@ -9,7 +22,8 @@ import Modal from '../../components/ui/Modal';
 import { formatAmount, getCurrency } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { useAppStore } from '../../store/useAppStore';
-import type { InvoiceStatus, SupplierPayment } from '../../types';
+import { useAuthStore } from '../../store/useAuthStore';
+import type { InvoiceStatus, PurchaseAttachment, SupplierPayment } from '../../types';
 
 const STATUS_BADGE: Record<InvoiceStatus, { label: string; variant: 'green' | 'yellow' | 'red' | 'gray' | 'blue' | 'purple' }> = {
   PAID: { label: 'Paid', variant: 'green' },
@@ -46,7 +60,13 @@ export default function PurchaseDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showNotification } = useAppStore();
+  const { hasPermission } = useAuthStore();
+  const canAttach = hasPermission('purchases.attach_invoice');
+  const canViewAttachment = hasPermission('purchases.view_attachment');
+  const canDownloadAttachment = hasPermission('purchases.download_attachment');
+  const canViewStatement = hasPermission('suppliers.view_statement');
   const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentForm, setPaymentForm] = useState<PaymentForm>({
     amount: '',
@@ -67,7 +87,49 @@ export default function PurchaseDetailPage() {
     enabled: !!id,
   });
 
+  const { data: attachmentsData } = useQuery({
+    queryKey: ['purchase-attachments', id],
+    queryFn: () => purchasesApi.listAttachments(id!),
+    enabled: !!id && canViewAttachment,
+  });
+
   const payments: SupplierPayment[] = paymentsData?.data ?? [];
+  const attachments: PurchaseAttachment[] = attachmentsData?.data ?? [];
+
+  const uploadAttachment = useMutation({
+    mutationFn: (file: File) => purchasesApi.uploadAttachment(id!, file),
+    onSuccess: () => {
+      showNotification('Attachment uploaded.', 'success');
+      qc.invalidateQueries({ queryKey: ['purchase-attachments', id] });
+    },
+    onError: (err: any) => {
+      showNotification(err?.message ?? 'Failed to upload attachment.', 'error');
+    },
+  });
+
+  function handleUploadClick() {
+    fileInputRef.current?.click();
+  }
+
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadAttachment.mutate(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function handleDownload(att: PurchaseAttachment) {
+    purchasesApi
+      .downloadAttachment(att.purchaseOrderId, att.id, att.originalFileName)
+      .catch((err: any) => {
+        showNotification(err?.message ?? 'Failed to download attachment.', 'error');
+      });
+  }
+
+  function formatBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(2)} MB`;
+  }
 
   const recordPayment = useMutation({
     mutationFn: () =>
@@ -238,6 +300,102 @@ export default function PurchaseDetailPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Supplier invoice attachments */}
+      {canViewAttachment && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div className="p-4 border-b border-gray-200 flex items-center gap-2">
+            <Paperclip className="w-4 h-4 text-gray-500" />
+            <h2 className="font-semibold text-gray-800">Supplier Invoice Attachments</h2>
+            <span className="text-xs text-gray-400 ml-2">
+              {po.supplier?.name} · {po.poNumber}
+            </span>
+            {canAttach && (
+              <div className="ml-auto">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                  onChange={handleFileSelected}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleUploadClick}
+                  loading={uploadAttachment.isPending}
+                >
+                  <Upload className="w-4 h-4" /> Upload
+                </Button>
+              </div>
+            )}
+          </div>
+          {attachments.length === 0 ? (
+            <div className="p-8 text-center text-sm text-gray-500">
+              No supplier invoice uploaded
+            </div>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {attachments.map((att) => {
+                const isImage = att.mimeType.startsWith('image/');
+                return (
+                  <li key={att.id} className="flex items-center gap-3 px-4 py-3">
+                    {isImage
+                      ? <ImageIcon className="w-5 h-5 text-blue-500" />
+                      : <FileText className="w-5 h-5 text-red-500" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">
+                        {att.originalFileName}
+                      </p>
+                      <p className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
+                        <span>{att.mimeType}</span>
+                        <span>·</span>
+                        <span>{formatBytes(att.fileSize)}</span>
+                        <span>·</span>
+                        <span className="flex items-center gap-1">
+                          <UserIcon className="w-3 h-3" />
+                          {att.uploadedBy?.username ?? 'unknown'}
+                        </span>
+                        <span>·</span>
+                        <span>{new Date(att.createdAt).toLocaleString()}</span>
+                      </p>
+                    </div>
+                    {canDownloadAttachment && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleDownload(att)}
+                      >
+                        <Download className="w-4 h-4" /> Download
+                      </Button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Quick-link to supplier statement */}
+      {canViewStatement && po.supplier && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">{po.supplier.name}</p>
+            <p className="text-xs text-gray-500">View full account statement for this supplier</p>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate(`/purchases/suppliers/${po.supplierId}/statement`)}
+          >
+            Open Statement
+          </Button>
         </div>
       )}
 

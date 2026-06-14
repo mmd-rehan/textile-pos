@@ -4,6 +4,7 @@ import { RequirePermissions } from '../auth/decorators/require-permissions.decor
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
+import { SupplierStatementQueryDto } from './dto/supplier-statement-query.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { SuppliersService } from './suppliers.service';
 
@@ -50,5 +51,12 @@ export class SuppliersController {
   @RequirePermissions('read:purchases')
   async getLedger(@Param('id') id: string, @Query() query: PaginationDto) {
     return this.suppliersService.getLedger(id, query);
+  }
+
+  @Get(':id/statement')
+  @RequirePermissions('suppliers.view_statement')
+  async getStatement(@Param('id') id: string, @Query() query: SupplierStatementQueryDto) {
+    const data = await this.suppliersService.getStatement(id, query);
+    return { data };
   }
 }

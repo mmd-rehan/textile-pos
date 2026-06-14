@@ -157,3 +157,6 @@ thumb
 sketch
 
 # End of https://www.toptal.com/developers/gitignore/api/node,react
+
+# Private uploaded files (supplier invoices etc.) — never commit
+backend/storage/

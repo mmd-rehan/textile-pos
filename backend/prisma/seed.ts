@@ -25,6 +25,10 @@ async function main() {
     { name: 'write:users', description: 'Manage system users and access roles' },
     { name: 'read:settings', description: 'View application settings' },
     { name: 'write:settings', description: 'Modify application and company settings' },
+    { name: 'purchases.attach_invoice', description: 'Upload supplier invoice/receipt attachments to purchases' },
+    { name: 'purchases.view_attachment', description: 'View purchase attachment metadata and list' },
+    { name: 'purchases.download_attachment', description: 'Download/view stored purchase invoice files' },
+    { name: 'suppliers.view_statement', description: 'View supplier account statement' },
   ];
 
   const permissionMap = new Map<string, string>();
@@ -78,11 +82,20 @@ async function main() {
       'read:inventory', 'write:inventory',
       'read:ledger', 'write:ledger',
       'read:settings',
+      'purchases.attach_invoice', 'purchases.view_attachment', 'purchases.download_attachment',
+      'suppliers.view_statement',
     ],
     Cashier: ['read:products', 'read:sales', 'write:sales'],
     Sales: ['write:sales'],
-    'Inventory Staff': ['read:products', 'write:products', 'read:inventory', 'write:inventory'],
-    Accountant: ['read:sales', 'read:purchases', 'read:ledger', 'write:ledger'],
+    'Inventory Staff': [
+      'read:products', 'write:products', 'read:inventory', 'write:inventory',
+      'purchases.attach_invoice', 'purchases.view_attachment',
+    ],
+    Accountant: [
+      'read:sales', 'read:purchases', 'read:ledger', 'write:ledger',
+      'purchases.view_attachment', 'purchases.download_attachment',
+      'suppliers.view_statement',
+    ],
   };
 
   let rolePermissionCount = 0;
