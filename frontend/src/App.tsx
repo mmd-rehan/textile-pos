@@ -1,14 +1,9 @@
 import { Loader2 } from 'lucide-react';
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/auth/ProtectedRoute';
-import FeatureDisabledPage from './components/ui/FeatureDisabledPage';
 import Shell from './components/layout/Shell';
+import FeatureDisabledPage from './components/ui/FeatureDisabledPage';
 import { useFeatureFlag } from './hooks/useFeatureFlags';
-import Dashboard from './pages/Dashboard';
-import Inventory from './pages/Inventory';
-import LoginPage from './pages/LoginPage';
-import NewSale from './pages/NewSale';
-import SalesHistory from './pages/SalesHistory';
 import SettingsPage from './pages/admin/SettingsPage';
 import UsersPage from './pages/admin/UsersPage';
 import BatchesPage from './pages/catalog/BatchesPage';
@@ -22,6 +17,8 @@ import ProductsPage from './pages/catalog/ProductsPage';
 import CustomerDetailPage from './pages/customers/CustomerDetailPage';
 import CustomerForm from './pages/customers/CustomerForm';
 import CustomersPage from './pages/customers/CustomersPage';
+import Dashboard from './pages/Dashboard';
+import Inventory from './pages/Inventory';
 import BarcodeLookupPage from './pages/inventory/BarcodeLookupPage';
 import MovementsPage from './pages/inventory/MovementsPage';
 import ReconcilePage from './pages/inventory/ReconcilePage';
@@ -29,17 +26,21 @@ import RemnantsListPage from './pages/inventory/RemnantsListPage';
 import RollDetailPage from './pages/inventory/RollDetailPage';
 import RollListPage from './pages/inventory/RollListPage';
 import WastageListPage from './pages/inventory/WastageListPage';
+import LoginPage from './pages/LoginPage';
+import NewSale from './pages/NewSale';
 import RetailPOSPage from './pages/pos/RetailPOSPage';
 import WholesalePOSPage from './pages/pos/WholesalePOSPage';
 import PurchaseCreatePage from './pages/purchases/PurchaseCreatePage';
 import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
 import PurchaseListPage from './pages/purchases/PurchaseListPage';
 import SuppliersPage from './pages/purchases/SuppliersPage';
+import SupplierStatementPage from './pages/purchases/SupplierStatementPage';
 import CustomersReportPage from './pages/reports/CustomersReportPage';
 import InventoryReportPage from './pages/reports/InventoryReportPage';
 import PurchasesReportPage from './pages/reports/PurchasesReportPage';
 import SalesReportPage from './pages/reports/SalesReportPage';
 import WastageReportPage from './pages/reports/WastageReportPage';
+import SalesHistory from './pages/SalesHistory';
 
 function FeatureFlagRoute({
   flagKey,
@@ -256,6 +257,14 @@ function App() {
             element={
               <ProtectedRoute permission="read:purchases">
                 <SuppliersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="purchases/suppliers/:id/statement"
+            element={
+              <ProtectedRoute permission="suppliers.view_statement">
+                <SupplierStatementPage />
               </ProtectedRoute>
             }
           />

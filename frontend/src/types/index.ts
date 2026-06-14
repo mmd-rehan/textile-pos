@@ -126,6 +126,61 @@ export interface SupplierLedgerEntry {
   createdAt: string;
 }
 
+export interface PurchaseAttachment {
+  id: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  originalFileName: string;
+  mimeType: string;
+  fileSize: number;
+  uploadedByUserId: string;
+  uploadedBy?: { id: string; username: string } | null;
+  supplier?: { id: string; name: string } | null;
+  purchaseOrder?: { id: string; poNumber: string } | null;
+  status: 'ACTIVE' | 'DELETED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupplierStatementEntry {
+  id: string;
+  date: string;
+  referenceNumber: string;
+  referenceType: string;
+  referenceId: string;
+  description: string;
+  currencyCode: string;
+  baseCurrencyCodeAtTime: string;
+  exchangeRateToBaseCurrency: string;
+  debitOriginalCurrency: string;
+  creditOriginalCurrency: string;
+  debitBaseCurrency: string;
+  creditBaseCurrency: string;
+  balanceAfterBase: string;
+  remarks?: string | null;
+}
+
+export interface SupplierStatement {
+  supplier: {
+    id: string;
+    name: string;
+    contactName?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    address?: string | null;
+    currentBalance: string;
+  };
+  baseCurrencyCode: string;
+  fromDate: string | null;
+  toDate: string | null;
+  openingBalanceBase: string;
+  closingBalanceBase: string;
+  totalDebitBase: string;
+  totalCreditBase: string;
+  entries: SupplierStatementEntry[];
+  generatedAt: string;
+}
+
 export interface Unit {
   id: string;
   name: string;

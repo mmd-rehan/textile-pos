@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Paperclip, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { currenciesApi } from '../../api/currencies';
 import { colorsApi, designsApi, type PurchaseProductSearchResult } from '../../api/products';
 import { purchasesApi } from '../../api/purchases';
 import { suppliersApi } from '../../api/suppliers';
+import AttachmentPicker from '../../components/purchases/AttachmentPicker';
 import PurchaseProductPicker from '../../components/purchases/PurchaseProductPicker';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
@@ -16,6 +17,7 @@ import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { COLORS_KEY } from '../../hooks/useColors';
 import { DESIGNS_KEY } from '../../hooks/useDesigns';
 import { useAppStore } from '../../store/useAppStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import type { Color, Design } from '../../types';
 
 type RowType = 'ROLL' | 'ITEM';
@@ -76,7 +78,10 @@ export default function PurchaseCreatePage() {
   const { code: baseCurrencyCode } = useBaseCurrency();
   const saleCurrency = getCurrency(baseCurrencyCode);
   const qc = useQueryClient();
+  const { hasPermission } = useAuthStore();
+  const canAttach = hasPermission('purchases.attach_invoice');
 
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [quickColorOpen, setQuickColorOpen] = useState(false);
   const [quickColorName, setQuickColorName] = useState('');
   const [quickDesignOpen, setQuickDesignOpen] = useState(false);
@@ -242,9 +247,41 @@ export default function PurchaseCreatePage() {
       };
       return purchasesApi.create(payload);
     },
-    onSuccess: (res) => {
-      showNotification(`Purchase ${res.data.poNumber} created successfully.`, 'success');
-      navigate(`/purchases/${res.data.id}`);
+    onSuccess: async (res) => {
+      const po = res.data;
+      // If user attached files, upload them now. Purchase is already saved —
+      // upload failure only surfaces a warning, never rolls back the PO.
+      if (attachments.length > 0 && canAttach) {
+        let failed = 0;
+        for (const file of attachments) {
+          try {
+            await purchasesApi.uploadAttachment(po.id, file);
+          } catch (err) {
+            failed += 1;
+            // eslint-disable-next-line no-console
+            console.warn('Attachment upload failed:', file.name, err);
+          }
+        }
+        if (failed === 0) {
+          showNotification(
+            `Purchase ${po.poNumber} created with ${attachments.length} attachment${attachments.length !== 1 ? 's' : ''}.`,
+            'success',
+          );
+        } else if (failed < attachments.length) {
+          showNotification(
+            `Purchase ${po.poNumber} saved. ${failed} of ${attachments.length} attachments failed — upload them from purchase detail.`,
+            'error',
+          );
+        } else {
+          showNotification(
+            `Purchase ${po.poNumber} saved, but attachment upload failed. You can upload it from purchase detail.`,
+            'error',
+          );
+        }
+      } else {
+        showNotification(`Purchase ${po.poNumber} created successfully.`, 'success');
+      }
+      navigate(`/purchases/${po.id}`);
     },
     onError: (err: any) => {
       showNotification(err?.message ?? 'Failed to create purchase.', 'error');
@@ -476,8 +513,8 @@ export default function PurchaseCreatePage() {
                   {/* Row type badge */}
                   <div className="flex items-center gap-2 mb-3">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isRoll
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-amber-100 text-amber-700'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-amber-100 text-amber-700'
                       }`}>
                       {isRoll ? 'Fabric Roll' : 'Quantity Item'}
                     </span>
@@ -698,6 +735,26 @@ export default function PurchaseCreatePage() {
             </span>
           </div>
         </div>
+
+        {/* Supplier invoice attachments */}
+        {canAttach && (
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-3">
+            <div className="flex items-center gap-2">
+              <Paperclip className="w-4 h-4 text-gray-500" />
+              <h2 className="font-semibold text-gray-800">Supplier Invoice / Receipt</h2>
+              <span className="text-xs text-gray-400 ml-auto">Optional</span>
+            </div>
+            <p className="text-xs text-gray-500">
+              Upload the supplier's invoice or receipt for reference. Files are stored
+              privately and only authorized users can download them later.
+            </p>
+            <AttachmentPicker
+              files={attachments}
+              onChange={setAttachments}
+              disabled={createMutation.isPending}
+            />
+          </div>
+        )}
 
         {/* Payment summary */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
