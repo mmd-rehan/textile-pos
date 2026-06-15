@@ -35,6 +35,7 @@ import PurchaseDetailPage from './pages/purchases/PurchaseDetailPage';
 import PurchaseListPage from './pages/purchases/PurchaseListPage';
 import SuppliersPage from './pages/purchases/SuppliersPage';
 import SupplierStatementPage from './pages/purchases/SupplierStatementPage';
+import SupplierStatementPrintView from './pages/purchases/SupplierStatementPrintView';
 import CustomersReportPage from './pages/reports/CustomersReportPage';
 import InventoryReportPage from './pages/reports/InventoryReportPage';
 import PurchasesReportPage from './pages/reports/PurchasesReportPage';
@@ -68,6 +69,17 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+
+        {/* Standalone print route — rendered outside the dashboard Shell
+            so the sidebar / top nav don't appear when the user prints. */}
+        <Route
+          path="/purchases/suppliers/:id/statement/print"
+          element={
+            <ProtectedRoute permission="suppliers.view_statement">
+              <SupplierStatementPrintView />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/"
