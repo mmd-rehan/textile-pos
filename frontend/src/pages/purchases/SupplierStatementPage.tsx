@@ -43,7 +43,15 @@ export default function SupplierStatementPage() {
   }
 
   function handlePrint() {
-    window.print();
+    if (!id) return;
+    const params = new URLSearchParams();
+    if (appliedFilters.fromDate) params.set('fromDate', appliedFilters.fromDate);
+    if (appliedFilters.toDate) params.set('toDate', appliedFilters.toDate);
+    const qs = params.toString();
+    const url = `/purchases/suppliers/${id}/statement/print${qs ? `?${qs}` : ''}`;
+    // Open in a new tab so the user can keep filtering in the main view.
+    // The print view auto-triggers window.print() once data is loaded.
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   function handleExport() {
