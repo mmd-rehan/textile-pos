@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { AppError } from '../../common/errors/app-error';
 import { PrismaService } from '../../database/prisma.service';
+import {
+  CANONICAL_FLAG_KEYS,
+  DEFAULT_FLAG_ENABLED,
+  FEATURE_FLAG_DEFINITIONS,
+} from './feature-flags.service';
 
 @Injectable()
 export class SettingsService {
@@ -85,12 +91,32 @@ export class SettingsService {
     };
   }
 
+  /**
+   * Returns exactly the five canonical feature flags. Legacy/duplicate rows are
+   * ignored, and any canonical flag missing from the DB defaults to the v1
+   * default (enabled). Run the seed/repair to fold legacy rows into these keys.
+   */
   async getFeatureFlags(): Promise<Record<string, boolean>> {
-    const rows = await this.prisma.featureFlag.findMany({ orderBy: { name: 'asc' } });
-    return Object.fromEntries(rows.map((r) => [r.name, r.isEnabled]));
+    const rows = await this.prisma.featureFlag.findMany();
+    const byName = new Map(rows.map((r) => [r.name, r.isEnabled]));
+    return Object.fromEntries(
+      CANONICAL_FLAG_KEYS.map((key) => [key, byName.get(key) ?? DEFAULT_FLAG_ENABLED]),
+    );
+  }
+
+  /** Canonical flag definitions (key + label + description) for the UI. */
+  getFeatureFlagDefinitions(): ReadonlyArray<{ key: string; label: string; description: string }> {
+    return FEATURE_FLAG_DEFINITIONS;
   }
 
   async updateFeatureFlag(name: string, isEnabled: boolean, userId: string): Promise<Record<string, boolean>> {
+    if (!CANONICAL_FLAG_KEYS.includes(name)) {
+      throw AppError.badRequest(
+        `Unknown feature flag "${name}". Allowed: ${CANONICAL_FLAG_KEYS.join(', ')}.`,
+        'UNKNOWN_FEATURE_FLAG',
+      );
+    }
+
     await this.prisma.featureFlag.upsert({
       where: { name },
       create: { name, isEnabled },

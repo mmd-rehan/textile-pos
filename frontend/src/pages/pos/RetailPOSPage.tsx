@@ -199,7 +199,7 @@ export default function RetailPOSPage() {
   const taxRatePercent = parseFloat(taxSettings?.taxRatePercent ?? '0') || 0;
   const taxLabel = taxSettings?.taxLabel || 'Tax';
 
-  const { enabled: creditSalesEnabled } = useFeatureFlag('credit_sales');
+  const { enabled: creditSalesEnabled } = useFeatureFlag('creditSales');
 
   const { data: customersData } = useQuery({
     queryKey: ['customers-search', customerSearch],

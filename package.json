@@ -8,9 +8,16 @@
     "backend"
   ],
   "scripts": {
+    "setup": "bash scripts/setup.sh",
     "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
-    "start": "npm run start --workspace=backend"
+    "start": "npm run start --workspace=backend",
+    "db:migrate": "npm --workspace=backend exec -- prisma migrate dev",
+    "db:deploy": "npm --workspace=backend exec -- prisma migrate deploy",
+    "db:seed": "npm --workspace=backend exec -- prisma db seed",
+    "db:generate": "npm --workspace=backend exec -- prisma generate"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

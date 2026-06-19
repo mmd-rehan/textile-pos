@@ -7,7 +7,7 @@ import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { CreateSupplierPaymentDto } from './dto/create-supplier-payment.dto';
 import { QueryPurchaseDto } from './dto/query-purchase.dto';
 
-const FALLBACK_BASE_CURRENCY = 'PKR';
+const FALLBACK_BASE_CURRENCY = 'USD';
 
 const PO_INCLUDE = {
   supplier: { select: { id: true, name: true, contactName: true } },

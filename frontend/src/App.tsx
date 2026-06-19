@@ -102,7 +102,7 @@ function App() {
             path="pos/wholesale"
             element={
               <ProtectedRoute permission="write:sales">
-                <FeatureFlagRoute flagKey="wholesale_enabled" featureName="Wholesale POS">
+                <FeatureFlagRoute flagKey="wholesalePos" featureName="Wholesale POS">
                   <WholesalePOSPage />
                 </FeatureFlagRoute>
               </ProtectedRoute>
@@ -310,7 +310,7 @@ function App() {
             path="inventory/wastage"
             element={
               <ProtectedRoute permission="read:inventory">
-                <FeatureFlagRoute flagKey="wastage_tracking" featureName="Wastage Tracking">
+                <FeatureFlagRoute flagKey="wastageTracking" featureName="Wastage Tracking">
                   <WastageListPage />
                 </FeatureFlagRoute>
               </ProtectedRoute>
@@ -320,7 +320,7 @@ function App() {
             path="inventory/remnants"
             element={
               <ProtectedRoute permission="read:inventory">
-                <FeatureFlagRoute flagKey="remnant_management" featureName="Remnant Management">
+                <FeatureFlagRoute flagKey="remnantManagement" featureName="Remnant Management">
                   <RemnantsListPage />
                 </FeatureFlagRoute>
               </ProtectedRoute>
@@ -364,7 +364,7 @@ function App() {
             path="reports/wastage"
             element={
               <ProtectedRoute permission="read:inventory">
-                <FeatureFlagRoute flagKey="wastage_tracking" featureName="Wastage Report">
+                <FeatureFlagRoute flagKey="wastageTracking" featureName="Wastage Report">
                   <WastageReportPage />
                 </FeatureFlagRoute>
               </ProtectedRoute>

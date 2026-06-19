@@ -146,51 +146,129 @@ erDiagram
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- [Docker](https://www.docker.com/) & Docker Compose
+- [Node.js](https://nodejs.org/) (v18 or higher) and `npm`
+- [Docker Desktop](https://www.docker.com/) (includes Docker Compose v2)
+- A `bash`-compatible shell (macOS / Linux / WSL)
 
-### 1. Setup the Repository
-Clone the repository and install the workspace dependencies from the root directory:
+### One-command setup
+
 ```bash
 git clone https://github.com/mmd-rehan/textile-pos.git
 cd textile-pos
-npm install
+npm run setup
 ```
 
-### 2. Launch the Database
-Start the preconfigured MySQL container:
+`npm run setup` runs `scripts/setup.sh`, which:
+1. Checks prerequisites (`node`, `npm`, `docker`, `docker compose`).
+2. Asks for any missing configuration (ports, db user, admin user, base currency, …).
+3. Auto-picks the next free port if 3306 / 5001 / 5173 are already in use.
+4. Generates random secrets for the DB password, MySQL root password, JWT, session, and (if you don't supply one) the admin password.
+5. Writes `backend/.env`, `frontend/.env`, and `docker/.env` — preserving any unrelated keys you've already added.
+6. Starts MySQL via `docker compose` and waits for the container to report healthy.
+7. Installs npm workspaces, generates the Prisma client, runs `prisma migrate deploy`, and runs `prisma db seed`.
+
+When it finishes, it prints the resolved service URLs and (if it generated an admin password) prints that password **once** — save it.
+
+### Non-interactive setup with flags
+
+Every interactive prompt has a matching flag, so the script can run fully unattended:
+
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+npm run setup -- \
+  --mysql-port 3307 \
+  --backend-port 5002 \
+  --frontend-port 5174 \
+  --db-name textile_pos \
+  --db-user textile_user \
+  --base-currency USD \
+  --company-name "Textile & POS ERP" \
+  --admin-username admin \
+  --admin-email admin@example.com \
+  --admin-password "Strong#Pass1" \
+  --yes
 ```
 
-### 3. Apply Migrations and Seed Data
-Initialize the database schemas and run the seed script to set up default configurations, permissions, roles, currencies, units, and seed users:
-```bash
-# Generate the Prisma client
-npm run prisma:generate --workspace=backend
+`--yes` accepts safe defaults and generates secrets for anything still missing. Other useful flags:
 
-# Run migrations (local dev)
-npm run prisma:migrate --workspace=backend
+| Flag | Effect |
+| :--- | :--- |
+| `--skip-install` | Skip `npm install`. |
+| `--skip-docker`  | Don't start the MySQL container (use your own). |
+| `--skip-migrate` | Don't apply Prisma migrations. |
+| `--skip-seed`    | Don't run the seeder. |
+| `--reset-admin-password` | Force-update an existing admin's password to `--admin-password`. |
+| `--allow-root-db-user` | Permit `root` as the application DB user (not recommended — see below). |
+| `--debug` | Verbose tracing (`set -x`). Never prints passwords or secrets. |
 
-# Seed the database
-npx prisma db seed --schema=backend/prisma/schema.prisma
-```
+Run `npm run setup -- --help` for the full list.
 
-### 4. Start Development Servers
-Run the NestJS backend and Vite frontend concurrently:
+> ℹ️  **Don't use `root` as the application DB user.** Use `textile_pos` (the default). If you pass `--db-user root`, setup warns and switches to `textile_pos` automatically — interactively it asks first. `--allow-root-db-user` overrides this; in that case the app connects as the real MySQL `root` account (the `mysql` image refuses to create a separate `root` user).
+
+### What gets seeded
+
+The seeder (`backend/prisma/seed.ts`) is **production-safe** and idempotent. It only seeds standard system data — no demo products, customers, suppliers, sales, purchases, or rolls:
+
+- **Permissions** — `auth.me`, `users.manage`, `roles.manage`, `settings.manage`, `audit.view`, `products.manage`, `categories.manage`, `brands.manage`, `colors.manage`, `designs.manage`, `batches.manage`, `suppliers.manage`, `purchases.create/view/pay/attach_invoice/view_attachment/download_attachment`, `suppliers.view_statement`, `inventory.view/create_roll/adjust_stock/reconcile_roll`, `barcode.lookup/generate`, `sales.create_retail/create_wholesale/view/view_all`, `customers.manage/create_basic`, `ledger.view_customer/record_payment`, `wastage.view/create_manual/view_reports`, `remnants.view/manage`, `reports.view_sales/view_inventory/view_financial` (plus legacy `read:*` / `write:*` permissions still consumed by current auth guards).
+- **Roles** — `Admin`, `Manager`, `Cashier`, `Inventory Staff`, `Accountant` (existing custom roles are not removed).
+- **Currencies** — AED, PKR, USD, GBP, EUR, SAR, INR, CNY, TRY (with 1:1 self exchange rates only — no hard-coded cross rates).
+- **Units** — Yard, Meter, Piece, Pack, Roll (+ Yard ↔ Meter conversions).
+- **Company settings** — name, phone, email, address, base currency, timezone.
+- **App settings** — invoice / PO / payment / barcode prefixes (`INV`, `WINV`, `PO`, `SPAY`, `CPAY`, `SRET`, `PRET`, `ROLL`, `TPOS`), tax defaults (`enabled=false`, `rate=0`, `label=VAT`), barcode format (`CODE128`), measurement defaults (base unit `YARD`, remnant threshold `2`, decimal precision `4`), and the allowed payment methods (`CASH`, `CARD`, `BANK_TRANSFER`, `CHEQUE`, `CREDIT`).
+- **Feature flags** — `wholesalePos`, `barcodeGeneration`, `wastageTracking`, `remnantManagement`, `creditSales` (defaults applied only on first install — re-runs never overwrite an admin's choice).
+- **Admin user** — created **only if no user with the Admin role exists**. Username, email, and password come from `SEED_ADMIN_*` env vars (written by `setup.sh`). To rotate the password later: re-run setup with `--reset-admin-password --admin-password "<new pw>"`.
+
+### Environment files
+
+`setup.sh` writes three files (all gitignored):
+
+- `backend/.env` — `PORT`, `DATABASE_URL`, `JWT_SECRET`, `SESSION_SECRET`, `CORS_ORIGIN`, `STORAGE_PATH`, `BASE_CURRENCY_CODE`, `SEED_*`.
+- `frontend/.env` — `VITE_API_URL`, `VITE_API_BASE_URL`, `VITE_BACKEND_PORT` (drives the Vite proxy).
+- `docker/.env` — `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `MYSQL_PORT` (consumed by `docker/docker-compose.yml`).
+
+Examples are checked in as `*.env.example`.
+
+### Start the app
+
 ```bash
 npm run dev
 ```
 
-- **Frontend client**: [http://localhost:5173](http://localhost:5173) (includes automatic proxying for `/api`)
-- **Backend API**: [http://localhost:5000/api/v1](http://localhost:5000/api/v1)
+- **Frontend**: `http://localhost:<frontend-port>` (default 5173) — proxies `/api` to the backend.
+- **Backend API**: `http://localhost:<backend-port>/api/v1` (default 5001).
 
-#### Default Accounts (Seeded)
-| Username | Password | Role | Permissions |
-| :--- | :--- | :--- | :--- |
-| `admin` | `Admin@123` | **Admin** | Full system control |
-| `cashier` | `Cashier@123` | **Cashier** | Sales checkout & catalog |
-| `sales` | `Sales@123` | **Sales** | POS screen only |
+Log in with the admin user created during setup.
+
+### Useful database commands
+
+```bash
+npm run db:generate      # Regenerate the Prisma client after schema edits
+npm run db:migrate       # prisma migrate dev — for local schema iteration
+npm run db:deploy        # prisma migrate deploy — for shared / staging / prod DBs
+npm run db:seed          # prisma db seed — re-run the standard seeder
+```
+
+> ⚠️  **Never** run `prisma db push` against a shared, staging, or production database. It rewrites the schema without producing a migration and will silently drop tables / columns. `db push` is only acceptable for throw-away local experiments. The standard flow is always `migrate dev` (locally) → commit the migration → `migrate deploy` (everywhere else).
+
+### Troubleshooting
+
+| Symptom | Fix |
+| :--- | :--- |
+| `Docker daemon reachable` check fails | Start Docker Desktop and re-run. |
+| `Port 3306 (or 5001 / 5173) is busy. Using N instead.` | This is fine — setup auto-picks the next free port and writes it to `docker/.env` (`MYSQL_PORT`) and `backend/.env` (`DATABASE_URL`). To reuse 3306, stop the conflicting container first (e.g. `docker stop mysql`). To force a specific port, pass `--mysql-port`, `--backend-port` or `--frontend-port` (e.g. `npm run setup -- --mysql-port 3307`). |
+| Another MySQL container already owns port 3306 | Safe — setup never stops, removes, or overwrites existing containers. It starts its own `textile_pos_db` on the next free host port. Either `docker stop mysql` to free 3306, or let setup pick 3307. |
+| `MySQL did not become ready in time.` | `docker compose -f docker/docker-compose.yml logs db` for details. Most often: stale `mysql_data` volume from a previous setup — `docker compose -f docker/docker-compose.yml down -v` then re-run setup. |
+| `Using 'root' as the application DB user is not recommended.` | Use `textile_pos`. Setup auto-switches under `--yes`; pass `--allow-root-db-user` only if you really need the app to connect as root. |
+| `prisma migrate deploy` fails | `cd backend && npx prisma migrate status` shows the offending migration. Verify `DATABASE_URL` in `backend/.env` matches `docker/.env`. |
+| `Admin user already exists.` after seed | Expected when re-running setup. Pass `--reset-admin-password --admin-password "<new pw>"` to rotate. |
+| `Permission denied` running `scripts/setup.sh` | `chmod +x scripts/setup.sh` (or just call `bash scripts/setup.sh`). |
+
+#### Default account
+
+A single Admin user is created on first install:
+
+| Username | Password | Role |
+| :--- | :--- | :--- |
+| `admin` (or `--admin-username`) | shown once at the end of setup (or whatever you passed via `--admin-password`) | **Admin** — full system access |
 
 ---
 

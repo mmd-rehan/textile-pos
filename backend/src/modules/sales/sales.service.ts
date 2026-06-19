@@ -103,11 +103,11 @@ export class SalesService {
           tx.unit.findFirst({ where: { abbreviation: 'yd' } }),
           tx.unit.findFirst({ where: { abbreviation: 'm' } }),
           tx.companySetting.findUnique({ where: { key: 'company_currency' } }),
-          tx.featureFlag.findUnique({ where: { name: 'wastage_tracking' } }),
-          tx.featureFlag.findUnique({ where: { name: 'credit_sales' } }),
+          tx.featureFlag.findUnique({ where: { name: 'wastageTracking' } }),
+          tx.featureFlag.findUnique({ where: { name: 'creditSales' } }),
         ]);
         if (!yardUnit) throw AppError.internal('Yard unit not configured', 'UNIT_NOT_FOUND');
-        const baseCurrencyCode = baseCurrencySetting?.value ?? 'PKR';
+        const baseCurrencyCode = baseCurrencySetting?.value ?? 'USD';
         const wastageTrackingEnabled = wastageFlag?.isEnabled ?? false;
         const creditSalesEnabled = creditFlag?.isEnabled ?? false;
 
@@ -579,11 +579,11 @@ export class SalesService {
           tx.unit.findFirst({ where: { abbreviation: 'yd' } }),
           tx.unit.findFirst({ where: { abbreviation: 'm' } }),
           tx.companySetting.findUnique({ where: { key: 'company_currency' } }),
-          tx.featureFlag.findUnique({ where: { name: 'wastage_tracking' } }),
-          tx.featureFlag.findUnique({ where: { name: 'credit_sales' } }),
+          tx.featureFlag.findUnique({ where: { name: 'wastageTracking' } }),
+          tx.featureFlag.findUnique({ where: { name: 'creditSales' } }),
         ]);
         if (!yardUnit) throw AppError.internal('Yard unit not configured', 'UNIT_NOT_FOUND');
-        const wsBaseCurrencyCode = wsBaseCurrencySetting?.value ?? 'PKR';
+        const wsBaseCurrencyCode = wsBaseCurrencySetting?.value ?? 'USD';
         const wsWastageTrackingEnabled = wsWastageFlag?.isEnabled ?? false;
         const wsCreditSalesEnabled = wsCreditFlag?.isEnabled ?? false;
 

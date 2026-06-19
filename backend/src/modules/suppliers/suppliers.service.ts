@@ -256,7 +256,7 @@ export class SuppliersService {
     const baseCurrencySetting = await this.prisma.companySetting.findUnique({
       where: { key: 'company_currency' },
     });
-    const baseCurrencyCode = baseCurrencySetting?.value ?? 'PKR';
+    const baseCurrencyCode = baseCurrencySetting?.value ?? 'USD';
 
     return {
       supplier: {

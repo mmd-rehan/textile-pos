@@ -233,8 +233,8 @@ export class RollsService {
           },
         });
 
-        // Record wastage entry for shrinkage (only when wastage_tracking is enabled)
-        const wastageFlag = await tx.featureFlag.findUnique({ where: { name: 'wastage_tracking' } });
+        // Record wastage entry for shrinkage (only when wastageTracking is enabled)
+        const wastageFlag = await tx.featureFlag.findUnique({ where: { name: 'wastageTracking' } });
         if (discrepancy.isNegative() && (wastageFlag?.isEnabled ?? false)) {
           await tx.wastageEntry.create({
             data: {

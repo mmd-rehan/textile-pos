@@ -4,7 +4,7 @@ import { getCurrency } from '../constants/currencies';
 
 /**
  * Returns the shop's current base currency, read live from company settings.
- * Falls back to PKR while loading or on error.
+ * Falls back to USD while loading or on error.
  * All new sales forms and POS screens should use this hook.
  * Saved historical records should display their own stored currencyCode.
  */
@@ -16,7 +16,7 @@ export function useBaseCurrency() {
     staleTime: 2 * 60 * 1000,
   });
 
-  const code = settings?.company_currency ?? 'PKR';
+  const code = settings?.company_currency ?? 'USD';
   const currency = getCurrency(code);
 
   return {

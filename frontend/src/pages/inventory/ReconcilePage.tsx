@@ -49,7 +49,7 @@ export default function ReconcilePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { showNotification } = useAppStore();
-  const { enabled: remnantManagementEnabled } = useFeatureFlag('remnant_management');
+  const { enabled: remnantManagementEnabled } = useFeatureFlag('remnantManagement');
 
   const [physicalLength, setPhysicalLength] = useState('');
   const [reason, setReason] = useState('');
