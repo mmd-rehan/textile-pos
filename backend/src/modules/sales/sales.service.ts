@@ -107,7 +107,7 @@ export class SalesService {
           tx.featureFlag.findUnique({ where: { name: 'creditSales' } }),
         ]);
         if (!yardUnit) throw AppError.internal('Yard unit not configured', 'UNIT_NOT_FOUND');
-        const baseCurrencyCode = baseCurrencySetting?.value ?? 'PKR';
+        const baseCurrencyCode = baseCurrencySetting?.value ?? 'USD';
         const wastageTrackingEnabled = wastageFlag?.isEnabled ?? false;
         const creditSalesEnabled = creditFlag?.isEnabled ?? false;
 
@@ -583,7 +583,7 @@ export class SalesService {
           tx.featureFlag.findUnique({ where: { name: 'creditSales' } }),
         ]);
         if (!yardUnit) throw AppError.internal('Yard unit not configured', 'UNIT_NOT_FOUND');
-        const wsBaseCurrencyCode = wsBaseCurrencySetting?.value ?? 'PKR';
+        const wsBaseCurrencyCode = wsBaseCurrencySetting?.value ?? 'USD';
         const wsWastageTrackingEnabled = wsWastageFlag?.isEnabled ?? false;
         const wsCreditSalesEnabled = wsCreditFlag?.isEnabled ?? false;
 

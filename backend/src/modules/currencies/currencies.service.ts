@@ -117,6 +117,6 @@ export class CurrenciesService {
 
   async getCurrentBaseCurrencyCode(): Promise<string> {
     const setting = await this.prisma.companySetting.findUnique({ where: { key: 'company_currency' } });
-    return setting?.value ?? 'PKR';
+    return setting?.value ?? 'USD';
   }
 }

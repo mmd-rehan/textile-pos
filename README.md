@@ -180,8 +180,8 @@ npm run setup -- \
   --frontend-port 5174 \
   --db-name textile_pos \
   --db-user textile_user \
-  --base-currency AED \
-  --company-name "Al Noor Textile Trading" \
+  --base-currency USD \
+  --company-name "Textile & POS ERP" \
   --admin-username admin \
   --admin-email admin@example.com \
   --admin-password "Strong#Pass1" \

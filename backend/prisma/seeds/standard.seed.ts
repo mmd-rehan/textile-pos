@@ -21,8 +21,8 @@
  *   SEED_ADMIN_EMAIL           default "admin@textilepos.local"
  *   SEED_ADMIN_PASSWORD        required for first install
  *   SEED_RESET_ADMIN_PASSWORD  "true" to force-reset existing admin's password
- *   SEED_COMPANY_NAME          default "Al Noor Textile Trading"
- *   SEED_BASE_CURRENCY         default "AED" (must be in currency seed list)
+ *   SEED_COMPANY_NAME          default "Textile & POS ERP"
+ *   SEED_BASE_CURRENCY         default "USD" (must be in currency seed list)
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -212,15 +212,15 @@ const UNITS: { name: string; abbreviation: string }[] = [
 // ──────────────────────────────────────────────────────────────────────────────
 function companySettingsSeed(): { key: string; value: string; description: string }[] {
   return [
-    { key: 'company_name',     value: envOr('SEED_COMPANY_NAME', 'Al Noor Textile Trading'),
+    { key: 'company_name',     value: envOr('SEED_COMPANY_NAME', 'Textile & POS ERP'),
       description: 'Official registered company / shop name' },
     { key: 'company_phone',    value: '+971-4-000-0000',
       description: 'Primary contact phone' },
-    { key: 'company_email',    value: 'admin@alnoortextile.local',
+    { key: 'company_email',    value: 'admin@textileandposerp.local',
       description: 'Primary contact email' },
     { key: 'company_address',  value: 'Textile Market, Dubai, UAE',
       description: 'Shop address' },
-    { key: 'company_currency', value: normalizeCode(envOr('SEED_BASE_CURRENCY', 'AED')),
+    { key: 'company_currency', value: normalizeCode(envOr('SEED_BASE_CURRENCY', 'USD')),
       description: 'Base / global selling currency (3-letter ISO code)' },
     { key: 'company_timezone', value: 'Asia/Dubai',
       description: 'System base timezone' },
@@ -328,7 +328,7 @@ async function seedRolePermissions(
 }
 
 async function seedCurrencies(prisma: PrismaClient) {
-  const baseCurrency = normalizeCode(envOr('SEED_BASE_CURRENCY', 'AED'));
+  const baseCurrency = normalizeCode(envOr('SEED_BASE_CURRENCY', 'USD'));
   if (!CURRENCIES.some((c) => c.code === baseCurrency)) {
     console.log(`   ⚠️  SEED_BASE_CURRENCY=${baseCurrency} is not in the standard list; ignoring.`);
   }

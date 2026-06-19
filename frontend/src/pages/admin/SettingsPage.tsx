@@ -59,7 +59,7 @@ function CompanyTab({ initial }: { initial: Record<string, string> }) {
     company_address: initial.company_address ?? '',
     company_phone: initial.company_phone ?? '',
     company_email: initial.company_email ?? '',
-    company_currency: initial.company_currency ?? 'PKR',
+    company_currency: initial.company_currency ?? 'USD',
     company_timezone: initial.company_timezone ?? 'Asia/Karachi',
     company_tax_enabled: initial.company_tax_enabled ?? 'false',
     company_tax_rate: initial.company_tax_rate ?? '0',
@@ -632,7 +632,7 @@ export default function SettingsPage() {
     select: (r) => r.data,
   });
 
-  const baseCurrencyCode = companyData?.company_currency ?? 'PKR';
+  const baseCurrencyCode = companyData?.company_currency ?? 'USD';
   const loading = companyLoading || appLoading || flagsLoading;
 
   return (

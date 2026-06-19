@@ -214,7 +214,7 @@ export default function PurchaseCreatePage() {
 
       const payload = {
         supplierId: form.supplierId,
-        currency: form.currency || 'PKR',
+        currency: form.currency || baseCurrencyCode,
         exchangeRateToBaseCurrency: isForeign ? (parseFloat(form.exchangeRate) || 1) : undefined,
         batchId: form.batchMode === 'existing' ? form.batchId || undefined : undefined,
         batchNumber: form.batchMode === 'new' ? form.batchNumber || undefined : undefined,
