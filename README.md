@@ -197,8 +197,12 @@ npm run setup -- \
 | `--skip-migrate` | Don't apply Prisma migrations. |
 | `--skip-seed`    | Don't run the seeder. |
 | `--reset-admin-password` | Force-update an existing admin's password to `--admin-password`. |
+| `--allow-root-db-user` | Permit `root` as the application DB user (not recommended — see below). |
+| `--debug` | Verbose tracing (`set -x`). Never prints passwords or secrets. |
 
 Run `npm run setup -- --help` for the full list.
+
+> ℹ️  **Don't use `root` as the application DB user.** Use `textile_pos` (the default). If you pass `--db-user root`, setup warns and switches to `textile_pos` automatically — interactively it asks first. `--allow-root-db-user` overrides this; in that case the app connects as the real MySQL `root` account (the `mysql` image refuses to create a separate `root` user).
 
 ### What gets seeded
 
@@ -250,8 +254,10 @@ npm run db:seed          # prisma db seed — re-run the standard seeder
 | Symptom | Fix |
 | :--- | :--- |
 | `Docker daemon reachable` check fails | Start Docker Desktop and re-run. |
-| `Port 3306 (or 5001 / 5173) is busy. Using N instead.` | This is fine — setup wrote the chosen port to the right env files. To force a specific port, pass `--mysql-port`, `--backend-port` or `--frontend-port`. |
-| `MySQL did not become healthy in time.` | `docker compose -f docker/docker-compose.yml logs db` for details. Most often: stale `mysql_data` volume from a previous setup — `docker compose -f docker/docker-compose.yml down -v` then re-run setup. |
+| `Port 3306 (or 5001 / 5173) is busy. Using N instead.` | This is fine — setup auto-picks the next free port and writes it to `docker/.env` (`MYSQL_PORT`) and `backend/.env` (`DATABASE_URL`). To reuse 3306, stop the conflicting container first (e.g. `docker stop mysql`). To force a specific port, pass `--mysql-port`, `--backend-port` or `--frontend-port` (e.g. `npm run setup -- --mysql-port 3307`). |
+| Another MySQL container already owns port 3306 | Safe — setup never stops, removes, or overwrites existing containers. It starts its own `textile_pos_db` on the next free host port. Either `docker stop mysql` to free 3306, or let setup pick 3307. |
+| `MySQL did not become ready in time.` | `docker compose -f docker/docker-compose.yml logs db` for details. Most often: stale `mysql_data` volume from a previous setup — `docker compose -f docker/docker-compose.yml down -v` then re-run setup. |
+| `Using 'root' as the application DB user is not recommended.` | Use `textile_pos`. Setup auto-switches under `--yes`; pass `--allow-root-db-user` only if you really need the app to connect as root. |
 | `prisma migrate deploy` fails | `cd backend && npx prisma migrate status` shows the offending migration. Verify `DATABASE_URL` in `backend/.env` matches `docker/.env`. |
 | `Admin user already exists.` after seed | Expected when re-running setup. Pass `--reset-admin-password --admin-password "<new pw>"` to rotate. |
 | `Permission denied` running `scripts/setup.sh` | `chmod +x scripts/setup.sh` (or just call `bash scripts/setup.sh`). |

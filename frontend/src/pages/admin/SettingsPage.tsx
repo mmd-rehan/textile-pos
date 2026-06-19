@@ -542,12 +542,14 @@ function CurrenciesTab({ baseCurrencyCode }: { baseCurrencyCode: string }) {
 
 // ── Feature flags tab ────────────────────────────────────────────────────────
 
+// Canonical feature-flag definitions. The Feature Flags tab renders ONLY these
+// keys, so legacy/unknown rows the API might return never show up as extra rows.
 const FLAG_META: Record<string, { label: string; description: string }> = {
-  wholesale_enabled: { label: 'Wholesale POS', description: 'Enable the wholesale POS and bulk invoicing flow.' },
-  barcode_generation: { label: 'Barcode Generation', description: 'Allow generating and printing barcodes from the system.' },
-  wastage_tracking: { label: 'Wastage Tracking', description: 'Track cutting wastage automatically on fabric sales.' },
-  remnant_management: { label: 'Remnant Management', description: 'Allow marking roll offcuts as remnants for later sale.' },
-  credit_sales: { label: 'Credit Sales', description: 'Allow partial payment / credit balance on sales invoices.' },
+  wholesalePos: { label: 'Wholesale POS', description: 'Enable the wholesale POS and bulk invoicing flow.' },
+  barcodeGeneration: { label: 'Barcode Generation', description: 'Allow generating and printing barcodes from the system.' },
+  wastageTracking: { label: 'Wastage Tracking', description: 'Track cutting wastage automatically on fabric sales.' },
+  remnantManagement: { label: 'Remnant Management', description: 'Allow marking roll offcuts as remnants for later sale.' },
+  creditSales: { label: 'Credit Sales', description: 'Allow partial payment / credit balance on sales invoices.' },
 };
 
 function FlagsTab({ initial }: { initial: Record<string, boolean> }) {
@@ -566,13 +568,19 @@ function FlagsTab({ initial }: { initial: Record<string, boolean> }) {
     onError: () => showNotification('Failed to update flag.', 'error'),
   });
 
-  const allFlags = new Set([...Object.keys(FLAG_META), ...Object.keys(flags)]);
+  // Render only the canonical flags from FLAG_META. Any unknown/legacy keys the
+  // API returns are ignored here (logged once for developers) so they never
+  // appear as extra rows in the UI.
+  const unknownKeys = Object.keys(flags).filter((k) => !(k in FLAG_META));
+  if (unknownKeys.length > 0) {
+    console.warn('[FeatureFlags] Ignoring unknown flag keys from API:', unknownKeys);
+  }
 
   return (
     <div className="space-y-4">
       <Section title="Feature Flags">
-        {[...allFlags].map((name) => {
-          const meta = FLAG_META[name] ?? { label: name, description: '' };
+        {Object.keys(FLAG_META).map((name) => {
+          const meta = FLAG_META[name];
           const enabled = flags[name] ?? false;
           return (
             <div key={name} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">

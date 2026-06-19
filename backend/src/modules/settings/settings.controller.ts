@@ -58,6 +58,13 @@ export class SettingsController {
     return createSuccessResponse(data);
   }
 
+  @Get('flags/definitions')
+  @RequirePermissions('read:settings')
+  getFeatureFlagDefinitions() {
+    const data = this.settingsService.getFeatureFlagDefinitions();
+    return createSuccessResponse(data);
+  }
+
   @Put('flags/:name')
   @RequirePermissions('write:settings')
   async updateFeatureFlag(

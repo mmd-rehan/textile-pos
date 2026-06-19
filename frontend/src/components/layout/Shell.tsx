@@ -108,21 +108,21 @@ export default function Shell() {
 
   const visibleNav = navigation.filter((item) => {
     if (item.permission && !can(item.permission)) return false;
-    if (item.href === '/pos/wholesale' && !flags.wholesale_enabled) return false;
+    if (item.href === '/pos/wholesale' && !flags.wholesalePos) return false;
     return true;
   });
   const visibleCustomers = customerLinks.filter((item) => !item.permission || can(item.permission));
   const visiblePurchases = purchaseLinks.filter((item) => !item.permission || can(item.permission));
   const visibleInventory = inventoryLinks.filter((item) => {
     if (item.permission && !can(item.permission)) return false;
-    if (item.href === '/inventory/wastage' && !flags.wastage_tracking) return false;
-    if (item.href === '/inventory/remnants' && !flags.remnant_management) return false;
+    if (item.href === '/inventory/wastage' && !flags.wastageTracking) return false;
+    if (item.href === '/inventory/remnants' && !flags.remnantManagement) return false;
     return true;
   });
   const visibleCatalog = catalogLinks.filter((item) => !item.permission || can(item.permission));
   const visibleReports = reportLinks.filter((item) => {
     if (item.permission && !can(item.permission)) return false;
-    if (item.href === '/reports/wastage' && !flags.wastage_tracking) return false;
+    if (item.href === '/reports/wastage' && !flags.wastageTracking) return false;
     return true;
   });
   const showCustomersSection = visibleCustomers.length > 0;

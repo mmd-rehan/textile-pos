@@ -90,7 +90,7 @@ export default function RollDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showNotification } = useAppStore();
-  const { enabled: barcodeGenerationEnabled } = useFeatureFlag('barcode_generation');
+  const { enabled: barcodeGenerationEnabled } = useFeatureFlag('barcodeGeneration');
   const [movPage, setMovPage] = useState(1);
   const [reconPage, setReconPage] = useState(1);
   const [showMarkFinished, setShowMarkFinished] = useState(false);
