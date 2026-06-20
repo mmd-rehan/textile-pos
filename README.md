@@ -272,6 +272,88 @@ A single Admin user is created on first install:
 
 ---
 
+## 🐳 Docker Deployment (full stack)
+
+The `npm run setup` flow above is for **local development** (it runs MySQL in Docker but the backend/frontend on your host). To run the **entire stack in containers** — MySQL, the backend API, and the Nginx-served frontend — use the root `docker-compose.yml`.
+
+> The root `docker-compose.yml` is independent of `docker/docker-compose.yml` (which only powers the dev MySQL for `npm run setup`). They use different volumes, so they don't conflict, but you normally run **one or the other**, not both.
+
+### 1. Local Docker deployment
+
+```bash
+cp .env.example .env     # then edit .env — set strong secrets and an admin password
+docker compose up --build
+```
+
+This single command:
+
+1. Starts **MySQL** (`mysql:8.0`) with a persistent `mysql_data` volume and a healthcheck.
+2. Builds and starts the **backend**, which waits for MySQL, runs `prisma migrate deploy`, runs the **standard seed** (`prisma db seed`), then starts the API.
+3. Builds and starts the **frontend** (Nginx serving the built React SPA).
+
+When it's up:
+
+- **Frontend** → `http://localhost:5173` (or your `FRONTEND_PORT`)
+- **Backend API** → `http://localhost:5001/api/v1` (or your `BACKEND_PORT`)
+- **Health check** → `http://localhost:5001/api/v1/health`
+
+Log in with the seeded admin credentials from your `.env` (`SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD`).
+
+> The frontend's API URL is baked in at **build time** from `VITE_API_BASE_URL` (default `http://localhost:5001/api/v1`). It must be a URL the **browser** can reach — never the Docker service name `backend`, which the browser can't resolve. If you change `BACKEND_PORT` or deploy to a domain, set `VITE_API_BASE_URL` accordingly and rebuild (`docker compose up --build`).
+
+### 2. Important before production
+
+- **Change every secret** in `.env` (`MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `JWT_SECRET`, `SESSION_SECRET`).
+- Use a **strong admin password** (`SEED_ADMIN_PASSWORD`).
+- **Do not expose MySQL publicly** unless you need to — remove the `mysql` `ports:` mapping, bind it to `127.0.0.1`, or block it at the firewall.
+- Put the app behind an **HTTPS reverse proxy** (Nginx / Caddy / Traefik) and point `CORS_ORIGIN` + `VITE_API_BASE_URL` at your domain.
+
+### 3. Useful commands
+
+```bash
+docker compose ps                  # service status
+docker compose logs -f backend     # backend logs (migrations, seed, API)
+docker compose logs -f frontend    # nginx logs
+docker compose logs -f mysql       # database logs
+docker compose down                # stop containers — KEEPS the database volume
+docker compose down -v             # stop AND DELETE the database volume (data loss!)
+```
+
+npm shortcuts are also available: `npm run docker:up`, `docker:down`, `docker:logs`, `docker:restart`, `docker:seed`, `docker:migrate`.
+
+### 4. Data persistence
+
+- `docker compose down` stops the containers but **keeps** the `mysql_data` and `purchase_attachments` volumes — your data and uploaded supplier invoices survive.
+- `docker compose down -v` **deletes** those volumes. **Never run `down -v` on production** unless you intentionally want to wipe the database.
+
+### 5. Migrations & seeding
+
+- On startup the backend runs **`prisma migrate deploy`** (migrations only — never `prisma db push`).
+- It then runs the **standard seed**, which is **idempotent** and **production-safe**: system data only (settings, currencies, units, roles/permissions, feature flags, tax/barcode/measurement defaults, and the admin user if missing). See [What gets seeded](#what-gets-seeded).
+- **Demo/dev data does not run by default.** To include sample products/suppliers/sales etc., set `SEED_DEV_DATA=true` in `.env` and rebuild.
+- To re-run manually against the running stack: `npm run docker:migrate` and `npm run docker:seed`.
+
+### 6. Deploying on a VPS
+
+```bash
+git clone https://github.com/mmd-rehan/textile-pos.git
+cd textile-pos
+cp .env.example .env
+# edit .env: strong secrets, admin password, and set VITE_API_BASE_URL + CORS_ORIGIN
+# to your public URLs (e.g. https://app.example.com and https://api.example.com/api/v1)
+
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+`docker-compose.prod.yml` sets `restart: always` so the stack survives reboots. In production you should additionally:
+
+- Front the services with an HTTPS reverse proxy (Nginx / Caddy / Traefik) and use domain-based `CORS_ORIGIN`.
+- Keep MySQL off the public internet (firewall / `127.0.0.1` binding).
+- Schedule **backups** of the `mysql_data` and `purchase_attachments` volumes.
+- Keep `.env` out of version control (it's gitignored).
+
+---
+
 ## 📜 Strict Project Rules & Design Decisions
 
 To contribute to this project, you **MUST** align with the architectural guardrails established for Version 1. Any pull request violating these principles will be automatically rejected.

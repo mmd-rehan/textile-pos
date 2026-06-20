@@ -1,0 +1,17 @@
+# Root build-context ignore. Service builds use ./backend and ./frontend as their
+# own contexts (each with its own .dockerignore), but this keeps stray files out
+# of any root-level build and documents what should never enter an image.
+node_modules
+**/node_modules
+.git
+.env
+.env.*
+!.env.example
+**/dist
+backend/storage
+docs
+.idea
+.vscode
+*.log
+.DS_Store
+textile-pos-banner.png

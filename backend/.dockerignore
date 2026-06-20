@@ -1,0 +1,13 @@
+# Keep the build context small and reproducible. node_modules is reinstalled
+# inside the image; local build output and secrets must never be copied in.
+node_modules
+dist
+.env
+.env.*
+!.env.example
+storage
+*.log
+npm-debug.log*
+.DS_Store
+Dockerfile
+.dockerignore

@@ -17,7 +17,13 @@
     "db:migrate": "npm --workspace=backend exec -- prisma migrate dev",
     "db:deploy": "npm --workspace=backend exec -- prisma migrate deploy",
     "db:seed": "npm --workspace=backend exec -- prisma db seed",
-    "db:generate": "npm --workspace=backend exec -- prisma generate"
+    "db:generate": "npm --workspace=backend exec -- prisma generate",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:restart": "docker compose down && docker compose up --build",
+    "docker:seed": "docker compose exec backend npx prisma db seed",
+    "docker:migrate": "docker compose exec backend npx prisma migrate deploy"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
