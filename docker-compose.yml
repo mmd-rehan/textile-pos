@@ -1,0 +1,86 @@
+# Full-stack deployment for TextilePOS: MySQL + backend API + Nginx-served frontend.
+#
+# Quick start:
+#   cp .env.example .env      # then edit secrets and (optionally) ports
+#   docker compose up --build
+#
+#   Frontend → http://localhost:${FRONTEND_PORT:-5173}
+#   Backend  → http://localhost:${BACKEND_PORT:-5001}/api/v1   (health: /health)
+#
+# This file is SEPARATE from docker/docker-compose.yml, which only runs MySQL for
+# the local `npm run setup` / `npm run dev` development workflow. Use this root
+# file for the containerised full-stack deployment.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: textile_pos_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-textile_pos}
+      MYSQL_USER: ${MYSQL_USER:-textile_pos}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+    # Optional host port mapping (handy for DB tools). Internally MySQL is always
+    # on 3306; the backend reaches it via the service name `mysql`.
+    ports:
+      - "${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: textile_pos_backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      # Backend talks to MySQL over the compose network via the service name `mysql`.
+      DATABASE_URL: mysql://${MYSQL_USER:-textile_pos}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-textile_pos}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      STORAGE_PATH: /app/storage
+      BASE_CURRENCY_CODE: ${SEED_BASE_CURRENCY:-USD}
+      # Seeder inputs (standard seed only; demo data stays off unless SEED_DEV_DATA=true).
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Administrator}
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-admin}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@textilepos.local}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set SEED_ADMIN_PASSWORD in .env}
+      SEED_COMPANY_NAME: ${SEED_COMPANY_NAME:-Textile & POS ERP}
+      SEED_BASE_CURRENCY: ${SEED_BASE_CURRENCY:-USD}
+      SEED_DEV_DATA: ${SEED_DEV_DATA:-false}
+    volumes:
+      - purchase_attachments:/app/storage
+    ports:
+      - "${BACKEND_PORT:-5001}:5001"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked into the bundle at build time — must be reachable from the BROWSER.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5001/api/v1}
+    container_name: textile_pos_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+
+volumes:
+  mysql_data:
+  purchase_attachments:

@@ -1,0 +1,12 @@
+# Keep the build context small. Deps are reinstalled and the app is rebuilt
+# inside the image; local output and env files must never be copied in.
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+# NOTE: nginx.conf is intentionally NOT ignored — the runtime stage copies it
+# from the build context.
+.dockerignore

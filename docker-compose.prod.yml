@@ -1,0 +1,26 @@
+# Production overrides for the full-stack deployment.
+#
+# Apply on top of the base compose file:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What it changes:
+#   - restart policy -> always (survive host reboots)
+#
+# Recommended production setup (do these yourself for your environment):
+#   - Put a reverse proxy (Nginx / Caddy / Traefik) with HTTPS in front of the
+#     frontend and backend; point CORS_ORIGIN + VITE_API_BASE_URL at your domain.
+#   - Do NOT publish MySQL to the public internet. Either remove the `ports:`
+#     mapping from the mysql service in docker-compose.yml, bind it to 127.0.0.1
+#     (e.g. "127.0.0.1:3307:3306"), or block the port at the firewall.
+#   - Back up the mysql_data volume and the purchase_attachments volume regularly.
+#   - Keep secrets in .env (never commit it) or inject them via your orchestrator.
+
+services:
+  mysql:
+    restart: always
+
+  backend:
+    restart: always
+
+  frontend:
+    restart: always
