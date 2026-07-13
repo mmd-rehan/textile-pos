@@ -13,7 +13,7 @@
 
 services:
   mysql:
-    image: mysql:8.0
+    image: mariadb:10.11
     container_name: textile_pos_mysql
     restart: unless-stopped
     environment:
@@ -21,14 +21,14 @@ services:
       MYSQL_USER: ${MYSQL_USER:-textile_pos}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
-    # Optional host port mapping (handy for DB tools). Internally MySQL is always
+    # Optional host port mapping (handy for DB tools). Internally MariaDB is always
     # on 3306; the backend reaches it via the service name `mysql`.
     ports:
       - "${MYSQL_PORT:-3307}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -46,8 +46,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5001
-      # Backend talks to MySQL over the compose network via the service name `mysql`.
-      DATABASE_URL: mysql://${MYSQL_USER:-textile_pos}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-textile_pos}
+      # Backend talks to database. Uses DATABASE_URL from .env if defined, otherwise defaults to local container.
+      DATABASE_URL: ${DATABASE_URL:-mysql://${MYSQL_USER:-textile_pos}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-textile_pos}}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
       SESSION_SECRET: ${SESSION_SECRET:-}
