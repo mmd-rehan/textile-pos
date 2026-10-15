@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, StreamableFile, UseGuards } from '@nestjs/common';
+import { XLSX_CONTENT_TYPE } from '../../common/utils/excel';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -6,12 +7,16 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { SupplierStatementQueryDto } from './dto/supplier-statement-query.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
+import { SupplierStatementExportService } from './supplier-statement-export.service';
 import { SuppliersService } from './suppliers.service';
 
 @Controller('suppliers')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SuppliersController {
-  constructor(private readonly suppliersService: SuppliersService) { }
+  constructor(
+    private readonly suppliersService: SuppliersService,
+    private readonly statementExport: SupplierStatementExportService,
+  ) { }
 
   @Get()
   @RequirePermissions('read:purchases')
@@ -51,6 +56,16 @@ export class SuppliersController {
   @RequirePermissions('read:purchases')
   async getLedger(@Param('id') id: string, @Query() query: PaginationDto) {
     return this.suppliersService.getLedger(id, query);
+  }
+
+  @Get(':id/statement/export')
+  @RequirePermissions('suppliers.view_statement')
+  async exportStatement(@Param('id') id: string, @Query() query: SupplierStatementQueryDto) {
+    const file = await this.statementExport.export(id, query);
+    return new StreamableFile(file.buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${file.filename}"`,
+    });
   }
 
   @Get(':id/statement')

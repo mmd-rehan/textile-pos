@@ -46,4 +46,10 @@ export const suppliersApi = {
     params: { fromDate?: string; toDate?: string } = {},
   ): Promise<{ data: SupplierStatement }> =>
     apiClient.get(`/suppliers/${supplierId}/statement`, { params }),
+
+  exportStatement: (
+    supplierId: string,
+    params: { fromDate?: string; toDate?: string } = {},
+  ): Promise<{ data: Blob; headers: Record<string, string> }> =>
+    apiClient.get(`/suppliers/${supplierId}/statement/export`, { params, responseType: 'blob' }),
 };

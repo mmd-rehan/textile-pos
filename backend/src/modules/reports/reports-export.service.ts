@@ -1,14 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { AppError } from '../../common/errors/app-error';
+import { cellValue, ColumnKind, NUM_FMT } from '../../common/utils/excel';
 import { ReportsService } from './reports.service';
 
 // Exports reuse the paginated report queries so filters and calculations
 // stay identical to what the report screens show.
 const PAGE_SIZE = 100;
 const MAX_ROWS = 50_000;
-
-type ColumnKind = 'text' | 'money' | 'qty' | 'int' | 'date' | 'datetime';
 
 interface Column<T> {
   header: string;
@@ -27,14 +26,6 @@ export interface ExportFile {
   buffer: Buffer;
   filename: string;
 }
-
-const NUM_FMT: Partial<Record<ColumnKind, string>> = {
-  money: '#,##0.00',
-  qty: '#,##0.0000',
-  int: '0',
-  date: 'yyyy-mm-dd',
-  datetime: 'yyyy-mm-dd hh:mm',
-};
 
 type Filters = Record<string, string | undefined>;
 
@@ -271,21 +262,3 @@ export class ReportsExportService {
   }
 }
 
-// Decimal values arrive as strings / Prisma.Decimal; Excel cells need numbers
-// to be summable. This is display output only — no arithmetic happens here.
-function cellValue(kind: ColumnKind | undefined, v: unknown) {
-  if (v === null || v === undefined || v === '') return null;
-  switch (kind) {
-    case 'money':
-    case 'qty':
-    case 'int': {
-      const n = Number(v.toString());
-      return Number.isFinite(n) ? n : v.toString();
-    }
-    case 'date':
-    case 'datetime':
-      return v instanceof Date ? v : new Date(v as string);
-    default:
-      return v instanceof Date ? v : String(v);
-  }
-}

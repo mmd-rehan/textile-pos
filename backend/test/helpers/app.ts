@@ -38,6 +38,23 @@ export class TestApi {
   put<T = any>(path: string, body?: unknown) {
     return this.send<T>('put', path, body ?? {});
   }
+  delete<T = any>(path: string) {
+    return this.send<T>('delete', path);
+  }
+
+  /** GET a binary file (e.g. an .xlsx export) and return its raw bytes. */
+  download(path: string) {
+    let req = request(this.app.getHttpServer()).get(`/api/v1${path}`);
+    if (this.token) req = req.set('Authorization', `Bearer ${this.token}`);
+    return req
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      })
+      .then((res) => ({ status: res.status, headers: res.headers, body: res.body as Buffer }));
+  }
 
   /** Asserts a 2xx response and returns its `data` payload. */
   async ok<T = any>(promise: Promise<ApiResponse<T>>): Promise<T> {

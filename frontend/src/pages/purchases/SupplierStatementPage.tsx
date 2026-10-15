@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
+import { ArrowLeft, Printer, Search } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { suppliersApi } from '../../api/suppliers';
 import Button from '../../components/ui/Button';
+import ExportButton from '../../components/ui/ExportButton';
 import { formatAmount } from '../../constants/currencies';
-import { useAppStore } from '../../store/useAppStore';
 
 interface FilterForm {
   fromDate: string;
@@ -15,7 +15,6 @@ interface FilterForm {
 export default function SupplierStatementPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { showNotification } = useAppStore();
   const [appliedFilters, setAppliedFilters] = useState<FilterForm>({
     fromDate: '',
     toDate: '',
@@ -54,11 +53,6 @@ export default function SupplierStatementPage() {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
-  function handleExport() {
-    if (!stmt) return;
-    showNotification('PDF export not yet available — use Print for now.', 'info');
-  }
-
   if (isLoading) {
     return <div className="p-8 text-center text-gray-500 text-sm">Loading statement…</div>;
   }
@@ -93,9 +87,15 @@ export default function SupplierStatementPage() {
             Generated {new Date(stmt.generatedAt).toLocaleString()}
           </p>
         </div>
-        <Button type="button" variant="secondary" size="sm" onClick={handleExport}>
-          <Download className="w-4 h-4" /> Export
-        </Button>
+        <ExportButton
+          fallbackName="supplier-statement.xlsx"
+          download={() =>
+            suppliersApi.exportStatement(id!, {
+              fromDate: appliedFilters.fromDate || undefined,
+              toDate: appliedFilters.toDate || undefined,
+            })
+          }
+        />
         <Button type="button" variant="secondary" size="sm" onClick={handlePrint}>
           <Printer className="w-4 h-4" /> Print
         </Button>
