@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Barcode, CheckSquare, ClipboardList, Copy } from 'lucide-react';
+import { ArrowLeft, Barcode, CheckSquare, ClipboardList, Copy, Printer } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { inventoryApi } from '../../api/inventory';
 import { rollsApi } from '../../api/rolls';
+import RollLabelModal from '../../components/inventory/RollLabelModal';
 import Badge from '../../components/ui/Badge';
 import Pagination from '../../components/ui/Pagination';
 import { formatAmount } from '../../constants/currencies';
@@ -94,6 +95,7 @@ export default function RollDetailPage() {
   const [movPage, setMovPage] = useState(1);
   const [reconPage, setReconPage] = useState(1);
   const [showMarkFinished, setShowMarkFinished] = useState(false);
+  const [showLabel, setShowLabel] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['roll', id],
@@ -275,13 +277,37 @@ export default function RollDetailPage() {
               </button>
             )}
             {barcodeGenerationEnabled && (
-              <div className="text-sm text-gray-400 italic">Barcode printing coming soon</div>
+              <button
+                onClick={() => setShowLabel(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                <Printer className="w-4 h-4" /> Print Label
+              </button>
             )}
           </div>
         ) : (
           <p className="text-sm text-gray-500">No barcode assigned.</p>
         )}
       </div>
+
+      {roll.barcode && (
+        <RollLabelModal
+          open={showLabel}
+          onClose={() => setShowLabel(false)}
+          roll={{
+            barcode: roll.barcode,
+            rollNumber: roll.rollNumber,
+            productName: roll.product?.name,
+            productCode: roll.product?.productCode,
+            colorName: roll.color?.name,
+            designName: roll.design?.name,
+            batchNumber: roll.batch?.batchNumber,
+            remainingLengthYard: roll.remainingLengthYard,
+            salePricePerYard: roll.salePricePerYard,
+            currencyCode: baseCurrencyCode,
+          }}
+        />
+      )}
 
       {/* Reconciliation history */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
