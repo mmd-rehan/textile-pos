@@ -261,7 +261,19 @@ npm run test:integration                             # migrates + seeds the _tes
 npm test                                             # both
 ```
 
-Create the empty database once, e.g. `CREATE DATABASE textile_pos_test;` in the dev MariaDB container. CI runs the same suite on every pull request (`.github/workflows/backend-tests.yml`).
+Create the empty database once, e.g. `CREATE DATABASE textile_pos_test;` in the dev MariaDB container.
+
+### Running the frontend tests
+
+Vitest + Testing Library in jsdom; the API is mocked, so no backend or database is needed.
+
+```bash
+cd frontend
+npm test            # run once
+npm run test:watch  # re-run on change
+```
+
+CI runs both suites on every pull request (`.github/workflows/tests.yml`).
 
 ### Troubleshooting
 
