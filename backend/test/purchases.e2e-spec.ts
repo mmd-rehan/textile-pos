@@ -111,6 +111,29 @@ describe('Purchases', () => {
     expect(after).toBe(before - 3 + 5);
   });
 
+  it('requires an exchange rate for a foreign-currency purchase instead of assuming 1:1', async () => {
+    const base = await ctx.prisma.companySetting.findUnique({ where: { key: 'company_currency' } });
+    const foreign = base?.value === 'AED' ? 'USD' : 'AED';
+    const res = await ctx.admin.post('/purchases', {
+      supplierId: catalog.supplierId,
+      currency: foreign,
+      rolls: [{ productId: catalog.rollProductId, originalLengthYard: 10, purchasePricePerYard: 3, salePricePerYard: 5 }],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('EXCHANGE_RATE_REQUIRED');
+    expect(await supplierBalance()).toBe(0);
+  });
+
+  it('rejects an initial payment larger than the purchase total', async () => {
+    const res = await ctx.admin.post('/purchases', {
+      supplierId: catalog.supplierId,
+      paidAmount: 25,
+      rolls: [{ productId: catalog.rollProductId, originalLengthYard: 10, purchasePricePerYard: 2, salePricePerYard: 5 }],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('PAID_EXCEEDS_TOTAL');
+  });
+
   describe('supplier payments', () => {
     it('reduces the due amount, supplier balance and marks the purchase PAID', async () => {
       const { purchase } = await createPurchase(ctx, catalog, { rollLengths: [50] });

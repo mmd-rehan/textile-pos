@@ -1,6 +1,7 @@
 import { AlertTriangle, Ban, Barcode, CheckCircle, Package, Search, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiErrorCode } from '../../api/errors';
 import { inventoryApi } from '../../api/inventory';
 import Badge from '../../components/ui/Badge';
 import { formatAmount } from '../../constants/currencies';
@@ -35,7 +36,7 @@ export default function BarcodeLookupPage() {
       const res = await inventoryApi.lookupBarcode(trimmed);
       setResult(res.data);
     } catch (err: any) {
-      const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
+      const code = apiErrorCode(err);
       if (code === 'BARCODE_NOT_FOUND') {
         setError('No roll or product found for this barcode.');
       } else {

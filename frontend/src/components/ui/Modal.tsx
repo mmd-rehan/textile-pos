@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -13,6 +13,7 @@ interface ModalProps {
 const sizes = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl' };
 
 export default function Modal({ open, onClose, title, children, size = 'md' }: ModalProps) {
+  const titleId = useId();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -32,10 +33,13 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
     >
       <div className="absolute inset-0 bg-black/40 print:hidden" onClick={onClose} />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={`relative bg-white rounded-xl shadow-xl w-full ${sizes[size]} max-h-[90vh] flex flex-col print:max-w-none print:max-h-none print:shadow-none print:rounded-none print:block`}
       >
         <div className="flex items-center justify-between p-5 border-b border-gray-200 print:hidden">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold text-gray-900">{title}</h2>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"

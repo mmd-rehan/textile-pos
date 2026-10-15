@@ -18,6 +18,8 @@ import { COLORS_KEY } from '../../hooks/useColors';
 import { DESIGNS_KEY } from '../../hooks/useDesigns';
 import { useAppStore } from '../../store/useAppStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { apiErrorMessage, serverFieldErrors } from '../../api/errors';
+import { dec, isValidDecimalInput } from '../../lib/pos-math';
 import type { Color, Design } from '../../types';
 
 type RowType = 'ROLL' | 'ITEM';
@@ -111,7 +113,7 @@ export default function PurchaseCreatePage() {
   const allColors: Color[] = colorsData ?? [];
   const allDesigns: Design[] = designsData ?? [];
 
-  const { register, control, handleSubmit, setValue, formState: { errors } } = useForm<PurchaseForm>({
+  const { register, control, handleSubmit, setValue, setError, formState: { errors } } = useForm<PurchaseForm>({
     defaultValues: {
       supplierId: '',
       currency: baseCurrencyCode,
@@ -136,7 +138,7 @@ export default function PurchaseCreatePage() {
   const exchangeRateStr = useWatch({ control, name: 'exchangeRate' });
   const purchaseCurrency = getCurrency(selectedCurrencyCode || baseCurrencyCode);
   const isBaseCurrency = selectedCurrencyCode === baseCurrencyCode;
-  const exchangeRate = isBaseCurrency ? 1 : (parseFloat(exchangeRateStr || '1') || 1);
+  const exchangeRate = isBaseCurrency ? 1 : dec(exchangeRateStr).toNumber();
 
   // Auto-fill exchange rate from stored rates when purchase currency changes
   useEffect(() => {
@@ -146,31 +148,23 @@ export default function PurchaseCreatePage() {
     }
     currenciesApi.getExchangeRates(baseCurrencyCode).then((res) => {
       const match = res.data.find((r) => r.fromCurrencyCode === selectedCurrencyCode);
-      if (match) {
-        setValue('exchangeRate', parseFloat(match.rate).toFixed(6));
-      } else {
-        setValue('exchangeRate', '1');
-      }
-    }).catch(() => { });
+      // No stored rate: leave it empty so the user must enter one — never assume 1:1.
+      setValue('exchangeRate', match ? dec(match.rate).toFixed(6) : '');
+    }).catch(() => setValue('exchangeRate', ''));
   }, [selectedCurrencyCode, baseCurrencyCode, setValue]);
 
-  // Total cost calculation across both row types
-  const totalCostOriginal = watchedRows?.reduce((sum, r) => {
+  // Total cost calculation across both row types (decimal, 2 places per line like the server)
+  const totalCost = (watchedRows ?? []).reduce((sum, r) => {
     if (!r) return sum;
-    if (r.rowType === 'ROLL') {
-      const len = parseFloat(r.originalLengthYard || '0') || 0;
-      const price = parseFloat(r.purchasePricePerYard || '0') || 0;
-      return sum + len * price;
-    } else {
-      const qty = parseFloat(r.quantity || '0') || 0;
-      const price = parseFloat(r.purchasePricePerUnit || '0') || 0;
-      return sum + qty * price;
-    }
-  }, 0) ?? 0;
-
-  const totalCostBase = totalCostOriginal * exchangeRate;
-  const paidVal = parseFloat(useWatch({ control, name: 'paidAmount' }) || '0') || 0;
-  const payable = Math.max(0, totalCostOriginal - paidVal);
+    const line = r.rowType === 'ROLL'
+      ? dec(r.originalLengthYard).times(dec(r.purchasePricePerYard))
+      : dec(r.quantity).times(dec(r.purchasePricePerUnit));
+    return sum.plus(line.toDecimalPlaces(2));
+  }, dec(0));
+  const totalCostOriginal = totalCost.toNumber();
+  const totalCostBase = totalCost.times(dec(exchangeRateStr)).toDecimalPlaces(2).toNumber();
+  const paidStr = useWatch({ control, name: 'paidAmount' });
+  const payable = Math.max(0, totalCost.minus(dec(paidStr)).toNumber());
 
   // Quick-create color
   const quickCreateColor = useMutation({
@@ -215,7 +209,7 @@ export default function PurchaseCreatePage() {
       const payload = {
         supplierId: form.supplierId,
         currency: form.currency || baseCurrencyCode,
-        exchangeRateToBaseCurrency: isForeign ? (parseFloat(form.exchangeRate) || 1) : undefined,
+        exchangeRateToBaseCurrency: isForeign ? parseFloat(form.exchangeRate) : undefined,
         batchId: form.batchMode === 'existing' ? form.batchId || undefined : undefined,
         batchNumber: form.batchMode === 'new' ? form.batchNumber || undefined : undefined,
         batchNotes: form.batchMode === 'new' ? form.batchNotes || undefined : undefined,
@@ -283,8 +277,15 @@ export default function PurchaseCreatePage() {
       }
       navigate(`/purchases/${po.id}`);
     },
-    onError: (err: any) => {
-      showNotification(err?.message ?? 'Failed to create purchase.', 'error');
+    onError: (err) => {
+      const fieldErrors = serverFieldErrors(err, {
+        EXCHANGE_RATE_REQUIRED: 'exchangeRate',
+        INVALID_EXCHANGE_RATE: 'exchangeRate',
+        PAID_EXCEEDS_TOTAL: 'paidAmount',
+        SUPPLIER_NOT_FOUND: 'supplierId',
+      }).filter((f) => ['exchangeRate', 'paidAmount', 'supplierId'].includes(f.field));
+      for (const f of fieldErrors) setError(f.field as 'exchangeRate' | 'paidAmount' | 'supplierId', { type: 'server', message: f.message });
+      showNotification(apiErrorMessage(err, 'Failed to create purchase.'), 'error');
     },
   });
 
@@ -315,10 +316,11 @@ export default function PurchaseCreatePage() {
           <h2 className="font-semibold text-gray-800">Purchase Details</h2>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="purchase-supplier" className="block text-sm font-medium text-gray-700 mb-1">
                 Supplier <span className="text-red-500">*</span>
               </label>
               <select
+                id="purchase-supplier"
                 {...register('supplierId', { required: 'Supplier is required' })}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
@@ -331,10 +333,11 @@ export default function PurchaseCreatePage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="purchase-currency" className="block text-sm font-medium text-gray-700 mb-1">
                 Purchase Currency <span className="text-red-500">*</span>
               </label>
               <select
+                id="purchase-currency"
                 {...register('currency')}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
@@ -379,7 +382,13 @@ export default function PurchaseCreatePage() {
                       type="number"
                       step="0.0001"
                       min="0.0001"
-                      {...register('exchangeRate', { required: !isBaseCurrency, min: 0.0001 })}
+                      aria-label={`Exchange rate ${purchaseCurrency.code} to ${saleCurrency.code}`}
+                      {...register('exchangeRate', {
+                        validate: (v) =>
+                          isBaseCurrency ||
+                          (isValidDecimalInput(v, 6) && dec(v).gt(0)) ||
+                          `Enter how many ${saleCurrency.code} one ${purchaseCurrency.code} is worth`,
+                      })}
                       className="w-full pl-24 pr-12 py-2 text-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-mono"
                       placeholder="e.g. 75.50"
                     />
@@ -387,6 +396,7 @@ export default function PurchaseCreatePage() {
                       {saleCurrency.code}
                     </span>
                   </div>
+                  {errors.exchangeRate && <p role="alert" className="mt-1 text-xs text-red-600">{errors.exchangeRate.message}</p>}
                 </div>
                 {exchangeRate > 0 && totalCostOriginal > 0 && (
                   <div className="text-sm text-blue-700">
@@ -591,6 +601,7 @@ export default function PurchaseCreatePage() {
                           </label>
                           <input
                             type="number" step="0.01" min="0.01"
+                            aria-label={`Row ${index + 1} roll length (yd)`}
                             {...register(`rows.${index}.originalLengthYard`, { required: rowType === 'ROLL', min: 0.01 })}
                             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                             placeholder="0.00"
@@ -607,6 +618,7 @@ export default function PurchaseCreatePage() {
                             </span>
                             <input
                               type="number" step="0.01" min="0"
+                              aria-label={`Row ${index + 1} purchase price per yard`}
                               {...register(`rows.${index}.purchasePricePerYard`, { required: rowType === 'ROLL', min: 0 })}
                               className="w-full pl-6 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                               placeholder="0.00"
@@ -624,6 +636,7 @@ export default function PurchaseCreatePage() {
                             </span>
                             <input
                               type="number" step="0.01" min="0"
+                              aria-label={`Row ${index + 1} sale price per yard`}
                               {...register(`rows.${index}.salePricePerYard`, { required: rowType === 'ROLL', min: 0 })}
                               className="w-full pl-6 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                               placeholder="0.00"
@@ -649,6 +662,7 @@ export default function PurchaseCreatePage() {
                           </label>
                           <input
                             type="number" step="1" min="1"
+                            aria-label={`Row ${index + 1} quantity`}
                             {...register(`rows.${index}.quantity`, { required: rowType === 'ITEM', min: 0.0001 })}
                             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                             placeholder="0"
@@ -665,6 +679,7 @@ export default function PurchaseCreatePage() {
                             </span>
                             <input
                               type="number" step="0.01" min="0"
+                              aria-label={`Row ${index + 1} purchase price per unit`}
                               {...register(`rows.${index}.purchasePricePerUnit`, { required: rowType === 'ITEM', min: 0 })}
                               className="w-full pl-6 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                               placeholder="0.00"
@@ -682,6 +697,7 @@ export default function PurchaseCreatePage() {
                             </span>
                             <input
                               type="number" step="0.01" min="0"
+                              aria-label={`Row ${index + 1} sale price per unit`}
                               {...register(`rows.${index}.salePricePerUnit`, { required: rowType === 'ITEM', min: 0 })}
                               className="w-full pl-6 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                               placeholder="0.00"
@@ -786,11 +802,20 @@ export default function PurchaseCreatePage() {
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-mono">{purchaseCurrency.symbol}</span>
                 <input
                   type="number" step="0.01" min="0"
-                  {...register('paidAmount')}
+                  aria-label="Amount paid now"
+                  {...register('paidAmount', {
+                    validate: (v) => {
+                      if (v.trim() === '') return true;
+                      if (!isValidDecimalInput(v, 2)) return 'Enter an amount with at most 2 decimal places';
+                      if (dec(v).gt(totalCost)) return 'Paid amount cannot be more than the purchase total';
+                      return true;
+                    },
+                  })}
                   className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
                   placeholder="0"
                 />
               </div>
+              {errors.paidAmount && <p role="alert" className="mt-1 text-xs text-red-600">{errors.paidAmount.message}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

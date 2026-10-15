@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { apiErrorCode } from '../../api/errors';
 import { customersApi } from '../../api/customers';
 import { inventoryApi } from '../../api/inventory';
 import type { CreateWholesaleSaleInput } from '../../api/sales';
@@ -23,6 +24,8 @@ import { settingsApi } from '../../api/settings';
 import Modal from '../../components/ui/Modal';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
+import { useMeterToYardFactor } from '../../hooks/useMeterToYardFactor';
+import { convertUnitPrice, dec, invoiceTotals, quantityLineValues, rollLineValues } from '../../lib/pos-math';
 import { useAppStore } from '../../store/useAppStore';
 import type {
   BarcodeLookupResult,
@@ -34,8 +37,6 @@ import type {
   StockItemSummary,
 } from '../../types';
 
-const M_TO_YD = 1.093613;
-const YD_TO_M = 0.9144;
 
 const PAYMENT_METHODS = [
   { value: 'CASH', label: 'Cash' },
@@ -106,31 +107,26 @@ interface StockPickerState {
 }
 
 // ── Calculation helpers ──────────────────────────────────────────────────────
+// Decimal maths lives in lib/pos-math (mirrors the backend); these adapt it to
+// numbers for display.
 
-function getRollLineValues(line: WholesaleRollCartLine) {
-  const factor = line.unit === 'METER' ? M_TO_YD : 1;
-  const remaining = parseFloat(line.remainingLengthYard) || 0;
-  const billed = line.isFullRoll ? remaining : parseFloat(line.billedQuantity) || 0;
-  const actualCut =
-    !line.isFullRoll && line.actualCutQuantity !== ''
-      ? parseFloat(line.actualCutQuantity) || 0
-      : billed;
-  const billedYard = line.isFullRoll ? remaining : billed * factor;
-  const actualCutYard = line.isFullRoll ? remaining : actualCut * factor;
-  const remainingAfterCut = remaining - actualCutYard;
-  const wastageYard = Math.max(0, actualCutYard - billedYard);
-  const unitPrice = parseFloat(line.unitPrice) || 0;
-  const discount = parseFloat(line.discountAmount) || 0;
-  const grossSubTotal = billed * unitPrice;
-  const subTotal = Math.max(0, grossSubTotal - discount);
-  return { billed, billedYard, actualCutYard, remainingAfterCut, wastageYard, grossSubTotal, subTotal };
+function getRollLineValues(line: WholesaleRollCartLine, meterToYard: string) {
+  const v = rollLineValues(line, meterToYard);
+  return {
+    billed: v.billed.toNumber(),
+    billedYard: v.billedYard.toNumber(),
+    actualCutYard: v.actualCutYard.toNumber(),
+    remainingAfterCut: v.remainingAfterCut.toNumber(),
+    wastageYard: v.wastageYard.toNumber(),
+    grossSubTotal: v.grossSubTotal.toNumber(),
+    subTotal: v.subTotal.toNumber(),
+    exceedsRoll: v.exceedsRoll,
+    negativeSubtotal: v.negativeSubtotal,
+  };
 }
 
 function getQtyLineSubtotal(line: WholesaleQtyCartLine) {
-  const qty = parseFloat(line.quantity) || 0;
-  const price = parseFloat(line.unitPrice) || 0;
-  const discount = parseFloat(line.discountAmount) || 0;
-  return Math.max(0, qty * price - discount);
+  return quantityLineValues(line).subTotal.toNumber();
 }
 
 function getInvoiceTotals(
@@ -138,20 +134,34 @@ function getInvoiceTotals(
   payments: PaymentEntry[],
   taxEnabled: boolean,
   taxRatePercent: number,
+  meterToYard: string,
 ) {
-  const subtotal = lines.reduce((s, l) => {
-    if (l.lineType === 'ROLL') return s + getRollLineValues(l).grossSubTotal;
-    const qty = parseFloat(l.quantity) || 0;
-    const price = parseFloat(l.unitPrice) || 0;
-    return s + qty * price;
-  }, 0);
-  const discountTotal = lines.reduce((s, l) => s + (parseFloat(l.discountAmount) || 0), 0);
-  const taxableAmount = Math.max(0, subtotal - discountTotal);
-  const taxAmount = taxEnabled ? Math.round(taxableAmount * taxRatePercent) / 100 : 0;
-  const grandTotal = taxableAmount + taxAmount;
-  const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-  const due = Math.max(0, grandTotal - totalPaid);
-  return { subtotal, discountTotal, taxableAmount, taxAmount, grandTotal, totalPaid, due };
+  const t = invoiceTotals(lines, payments, { enabled: taxEnabled, ratePercent: taxRatePercent }, meterToYard);
+  return {
+    subtotal: t.subtotal.toNumber(),
+    discountTotal: t.discountTotal.toNumber(),
+    taxableAmount: t.taxableAmount.toNumber(),
+    taxAmount: t.taxAmount.toNumber(),
+    grandTotal: t.grandTotal.toNumber(),
+    totalPaid: t.totalPaid.toNumber(),
+    due: t.due.toNumber(),
+    change: t.change.toNumber(),
+  };
+}
+
+function cartIssuesFor(lines: WholesaleCartLine[], meterToYard: string): string[] {
+  const issues: string[] = [];
+  for (const l of lines) {
+    if (l.lineType === 'ROLL') {
+      const v = rollLineValues(l, meterToYard);
+      if (v.exceedsRoll) issues.push(`Roll ${l.rollNumber}: cut is longer than the ${dec(l.remainingLengthYard).toFixed(2)} yd left`);
+      if (v.negativeSubtotal) issues.push(`Roll ${l.rollNumber}: discount is larger than the line amount`);
+    } else {
+      if (dec(l.quantity).gt(dec(l.quantityOnHand))) issues.push(`${l.productName}: only ${dec(l.quantityOnHand).toFixed(0)} in stock`);
+      if (quantityLineValues(l).negativeSubtotal) issues.push(`${l.productName}: discount is larger than the line amount`);
+    }
+  }
+  return issues;
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -159,6 +169,7 @@ function getInvoiceTotals(
 export default function WholesalePOSPage() {
   const { showNotification } = useAppStore();
   const { code: baseCurrencyCode } = useBaseCurrency();
+  const meterToYard = useMeterToYardFactor();
   const barcodeRef = useRef<HTMLInputElement>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Kept across retries of the same checkout so a resend after a lost response
@@ -433,7 +444,7 @@ export default function WholesalePOSPage() {
       }
       setBarcodeValue('');
     } catch (err: any) {
-      const code = err?.code ?? err?.response?.data?.error?.code;
+      const code = apiErrorCode(err);
       setScanError(code === 'BARCODE_NOT_FOUND' ? 'Barcode not found.' : 'Lookup failed.');
       setBarcodeValue('');
     } finally {
@@ -538,9 +549,7 @@ export default function WholesalePOSPage() {
 
   function handleUnitChange(lineId: string, line: WholesaleRollCartLine, newUnit: 'YARD' | 'METER') {
     if (newUnit === line.unit || line.isFullRoll) return;
-    const price = parseFloat(line.unitPrice) || 0;
-    const newPrice =
-      newUnit === 'METER' ? (price * YD_TO_M).toFixed(2) : (price / YD_TO_M).toFixed(2);
+    const newPrice = convertUnitPrice(line.unitPrice, newUnit);
     updateRollLine(lineId, { unit: newUnit, unitPrice: newPrice });
   }
 
@@ -569,7 +578,7 @@ export default function WholesalePOSPage() {
 
   function fillRemainingAsCash() {
     const allLines: WholesaleCartLine[] = [...rollLines, ...qtyLines];
-    const { due } = getInvoiceTotals(allLines, payments, taxEnabled, taxRatePercent);
+    const { due } = getInvoiceTotals(allLines, payments, taxEnabled, taxRatePercent, meterToYard);
     if (due <= 0) return;
     const cashIdx = payments.findIndex((p) => p.method === 'CASH');
     if (cashIdx >= 0) {
@@ -584,6 +593,8 @@ export default function WholesalePOSPage() {
   // ── Submit ────────────────────────────────────────────────────────────────────
 
   const allLines: WholesaleCartLine[] = [...rollLines, ...qtyLines];
+  // Problems the server would reject; shown above the button.
+  const cartIssues = cartIssuesFor(allLines, meterToYard);
   const canSubmit =
     !!customerId &&
     allLines.length > 0 &&
@@ -592,6 +603,7 @@ export default function WholesalePOSPage() {
       return parseFloat(l.billedQuantity) > 0 && parseFloat(l.unitPrice) >= 0;
     }) &&
     qtyLines.every((l) => parseFloat(l.quantity) > 0 && parseFloat(l.unitPrice) >= 0) &&
+    cartIssues.length === 0 &&
     !isSubmitting;
 
   async function handleCompleteSale() {
@@ -620,7 +632,8 @@ export default function WholesalePOSPage() {
                   !l.isFullRoll && l.actualCutQuantity !== ''
                     ? parseFloat(l.actualCutQuantity)
                     : undefined,
-                unit: 'YARD' as const,
+                // Full rolls are billed in yards; otherwise send the unit the cashier chose.
+                unit: l.isFullRoll ? ('YARD' as const) : l.unit,
                 unitPrice: parseFloat(l.unitPrice),
                 discountAmount: parseFloat(l.discountAmount) || 0,
                 isFullRoll: l.isFullRoll,
@@ -675,11 +688,12 @@ export default function WholesalePOSPage() {
     }
   }
 
-  const { subtotal, discountTotal, taxableAmount, taxAmount, grandTotal, totalPaid, due } = getInvoiceTotals(
+  const { subtotal, discountTotal, taxableAmount, taxAmount, grandTotal, totalPaid, due, change } = getInvoiceTotals(
     allLines,
     payments,
     taxEnabled,
     taxRatePercent,
+    meterToYard,
   );
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -752,6 +766,7 @@ export default function WholesalePOSPage() {
               onFocus={() => setShowCustomerDropdown(true)}
               onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
               onClick={(e) => e.stopPropagation()}
+              aria-label="Customer"
               placeholder="Search customer by name or phone…"
               className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
@@ -823,6 +838,7 @@ export default function WholesalePOSPage() {
                     if (e.key === 'Enter') { e.preventDefault(); handleBarcodeSubmit(); }
                   }}
                   onClick={(e) => e.stopPropagation()}
+                  aria-label="Barcode"
                   placeholder="Scan or type barcode, press Enter…"
                   className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
                   disabled={scanLoading}
@@ -940,7 +956,7 @@ export default function WholesalePOSPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {rollLines.map((line) => {
-                        const { subTotal, billed } = getRollLineValues(line);
+                        const { subTotal, billed } = getRollLineValues(line, meterToYard);
                         const remaining = parseFloat(line.remainingLengthYard) || 0;
                         return (
                           <tr key={line.id} className="hover:bg-gray-50">
@@ -978,6 +994,7 @@ export default function WholesalePOSPage() {
                                   min="0"
                                   step="0.01"
                                   value={line.billedQuantity}
+                                  aria-label={`Quantity for ${line.rollNumber}`}
                                   onChange={(e) => { e.stopPropagation(); updateRollLine(line.id, { billedQuantity: e.target.value }); }}
                                   onClick={(e) => e.stopPropagation()}
                                   placeholder="0.00"
@@ -991,6 +1008,7 @@ export default function WholesalePOSPage() {
                               ) : (
                                 <select
                                   value={line.unit}
+                                  aria-label={`Unit for ${line.rollNumber}`}
                                   onChange={(e) => { e.stopPropagation(); handleUnitChange(line.id, line, e.target.value as 'YARD' | 'METER'); }}
                                   onClick={(e) => e.stopPropagation()}
                                   className="text-xs border border-gray-300 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-primary-400"
@@ -1006,6 +1024,7 @@ export default function WholesalePOSPage() {
                                 min="0"
                                 step="0.01"
                                 value={line.unitPrice}
+                                aria-label={`Unit price for ${line.rollNumber}`}
                                 onChange={(e) => { e.stopPropagation(); updateRollLine(line.id, { unitPrice: e.target.value }); }}
                                 onClick={(e) => e.stopPropagation()}
                                 className="w-20 text-right text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-400"
@@ -1017,6 +1036,7 @@ export default function WholesalePOSPage() {
                                 min="0"
                                 step="0.01"
                                 value={line.discountAmount}
+                                aria-label={`Discount for ${line.rollNumber}`}
                                 onChange={(e) => { e.stopPropagation(); updateRollLine(line.id, { discountAmount: e.target.value }); }}
                                 onClick={(e) => e.stopPropagation()}
                                 className="w-20 text-right text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-400"
@@ -1204,6 +1224,7 @@ export default function WholesalePOSPage() {
                 <div key={i} className="flex gap-2">
                   <select
                     value={p.method}
+                    aria-label={`Payment ${i + 1} method`}
                     onChange={(e) => updatePayment(i, { method: e.target.value })}
                     onClick={(e) => e.stopPropagation()}
                     className="flex-1 text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400"
@@ -1217,6 +1238,7 @@ export default function WholesalePOSPage() {
                     min="0"
                     step="0.01"
                     value={p.amount}
+                    aria-label={`Payment ${i + 1} amount`}
                     onChange={(e) => updatePayment(i, { amount: e.target.value })}
                     onClick={(e) => e.stopPropagation()}
                     placeholder="0.00"
@@ -1274,12 +1296,25 @@ export default function WholesalePOSPage() {
                   <span>{formatAmount(due, baseCurrencyCode)}</span>
                 </div>
               )}
+              {change > 0 && (
+                <div className="flex justify-between text-sm font-semibold text-green-700 bg-green-50 rounded px-2 py-1">
+                  <span>Change</span>
+                  <span>{formatAmount(change, baseCurrencyCode)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-base font-bold text-gray-900 border-t border-gray-100 pt-2">
                 <span>Grand Total</span>
                 <span>{formatAmount(grandTotal, baseCurrencyCode)}</span>
               </div>
             </div>
 
+            {cartIssues.length > 0 && (
+              <div role="alert" className="mt-3 space-y-1">
+                {cartIssues.map((issue) => (
+                  <p key={issue} className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-1.5">{issue}</p>
+                ))}
+              </div>
+            )}
             {submitErrors.length > 0 && (
               <div className="mt-3 space-y-1">
                 {submitErrors.map((e, i) => (

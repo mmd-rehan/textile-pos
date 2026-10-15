@@ -3,6 +3,8 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
+import { apiErrorMessage, serverFieldErrors } from '../../api/errors';
+import { isValidDecimalInput } from '../../lib/pos-math';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
@@ -32,9 +34,27 @@ const schema = z.object({
   colorId: z.string().optional(),
   designId: z.string().optional(),
   defaultUnitId: z.string().min(1, 'Unit is required'),
-  retailPrice: z.number({ message: 'Must be a number' }).positive('Must be greater than 0'),
-  wholesalePrice: z.number({ message: 'Must be a number' }).positive('Must be greater than 0'),
+  retailPrice: price(),
+  wholesalePrice: price(),
 });
+
+// Money: positive, at most 2 decimal places (the server rejects more).
+function price() {
+  return z
+    .number({ message: 'Must be a number' })
+    .positive('Must be greater than 0')
+    .refine((v) => isValidDecimalInput(String(v), 2), { message: 'Use at most 2 decimal places' });
+}
+
+const SERVER_ERROR_FIELDS: Record<string, keyof FormData> = {
+  PRODUCT_CODE_EXISTS: 'productCode',
+  BARCODE_EXISTS: 'barcode',
+  CATEGORY_NOT_FOUND: 'categoryId',
+  BRAND_NOT_FOUND: 'brandId',
+  UNIT_NOT_FOUND: 'defaultUnitId',
+  COLOR_NOT_FOUND: 'colorId',
+  DESIGN_NOT_FOUND: 'designId',
+};
 
 type FormData = z.infer<typeof schema>;
 
@@ -57,6 +77,7 @@ export default function ProductForm() {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
@@ -95,10 +116,20 @@ export default function ProductForm() {
       wholesalePrice: data.wholesalePrice,
     };
 
-    if (isEdit && id) {
-      await update.mutateAsync({ id, data: payload });
-    } else {
-      await create.mutateAsync(payload);
+    try {
+      if (isEdit && id) {
+        await update.mutateAsync({ id, data: payload });
+      } else {
+        await create.mutateAsync(payload);
+      }
+    } catch (err) {
+      // Show the server's reason on the field it concerns, or above the buttons.
+      const fieldErrors = serverFieldErrors(err, SERVER_ERROR_FIELDS).filter((f) => f.field in schema.shape);
+      for (const f of fieldErrors) setError(f.field as keyof FormData, { type: 'server', message: f.message });
+      if (fieldErrors.length === 0) {
+        setError('root.server', { type: 'server', message: apiErrorMessage(err, 'Could not save the product.') });
+      }
+      return;
     }
     navigate('/catalog/products');
   }
@@ -228,6 +259,12 @@ export default function ProductForm() {
             />
           </div>
         </div>
+
+        {errors.root?.server && (
+          <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            {errors.root.server.message}
+          </p>
+        )}
 
         <div className="flex justify-end gap-3">
           <Button type="button" variant="secondary" onClick={() => navigate('/catalog/products')}>
