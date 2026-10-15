@@ -3,26 +3,42 @@ import { useState } from 'react';
 import { reportsApi, type ReportExportName } from '../../api/reports';
 import { useAppStore } from '../../store/useAppStore';
 
-interface ExportButtonProps {
-  report: ReportExportName;
-  // Same filters the report screen is using; page/limit are ignored server-side.
-  params: Record<string, string | number | undefined>;
-}
+type FileResponse = { data: Blob; headers: Record<string, string> };
 
-export default function ExportButton({ report, params }: ExportButtonProps) {
+type ExportButtonProps =
+  | {
+      report: ReportExportName;
+      // Same filters the report screen is using; page/limit are ignored server-side.
+      params: Record<string, string | number | undefined>;
+    }
+  | {
+      // Any other .xlsx endpoint (e.g. supplier statement)
+      download: () => Promise<FileResponse>;
+      fallbackName: string;
+    };
+
+export default function ExportButton(props: ExportButtonProps) {
   const { showNotification } = useAppStore();
   const [busy, setBusy] = useState(false);
 
   async function handleExport() {
     setBusy(true);
     try {
-      const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== undefined));
-      const res = await reportsApi.exportReport(report, clean);
+      let res: FileResponse;
+      let fallbackName: string;
+      if ('report' in props) {
+        const clean = Object.fromEntries(Object.entries(props.params).filter(([, v]) => v !== '' && v !== undefined));
+        res = await reportsApi.exportReport(props.report, clean);
+        fallbackName = `${props.report}.xlsx`;
+      } else {
+        res = await props.download();
+        fallbackName = props.fallbackName;
+      }
       const match = /filename="?([^"]+)"?/.exec(res.headers['content-disposition'] ?? '');
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = match?.[1] ?? `${report}.xlsx`;
+      a.download = match?.[1] ?? fallbackName;
       document.body.appendChild(a);
       a.click();
       a.remove();
