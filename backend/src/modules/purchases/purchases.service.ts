@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
+import { nextSequenceValue, trailingCounter } from '../../database/locking';
 import { PrismaService } from '../../database/prisma.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { CreateSupplierPaymentDto } from './dto/create-supplier-payment.dto';
@@ -431,12 +432,11 @@ export class PurchasesService {
           });
 
           if (stockItem) {
-            // Increment quantity and update prices
-            const newQty = new Prisma.Decimal(stockItem.quantityOnHand.toString()).plus(item.qty);
+            // Increment quantity atomically (a concurrent sale may be changing it) and update prices
             stockItem = await tx.productStockItem.update({
               where: { id: stockItem.id },
               data: {
-                quantityOnHand: newQty,
+                quantityOnHand: { increment: item.qty },
                 purchasePricePerUnitBaseCurrency: item.priceBase,
                 salePricePerUnit: item.salePrice,
                 ...(item.location ? { location: item.location } : {}),
@@ -705,10 +705,15 @@ export class PurchasesService {
     const d = String(now.getDate()).padStart(2, '0');
     const datePrefix = `PO-${y}${m}${d}`;
 
-    const count = await tx.purchaseOrder.count({
-      where: { poNumber: { startsWith: datePrefix } },
+    const next = await nextSequenceValue(tx, datePrefix, async () => {
+      const last = await tx.purchaseOrder.findFirst({
+        where: { poNumber: { startsWith: `${datePrefix}-` } },
+        orderBy: { poNumber: 'desc' },
+        select: { poNumber: true },
+      });
+      return trailingCounter(last?.poNumber);
     });
 
-    return `${datePrefix}-${String(count + 1).padStart(4, '0')}`;
+    return `${datePrefix}-${String(next).padStart(4, '0')}`;
   }
 }

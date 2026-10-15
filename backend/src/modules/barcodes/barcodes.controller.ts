@@ -10,7 +10,7 @@ export class BarcodesController {
   constructor(private readonly barcodesService: BarcodesService) { }
 
   @Get(':barcode/lookup')
-  @RequirePermissions('read:inventory')
+  @RequirePermissions('barcode.lookup')
   async lookup(@Param('barcode') barcode: string) {
     const data = await this.barcodesService.lookup(barcode);
     return { data };
