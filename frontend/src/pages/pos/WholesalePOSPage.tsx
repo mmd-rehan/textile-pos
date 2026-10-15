@@ -161,6 +161,9 @@ export default function WholesalePOSPage() {
   const { code: baseCurrencyCode } = useBaseCurrency();
   const barcodeRef = useRef<HTMLInputElement>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Kept across retries of the same checkout so a resend after a lost response
+  // returns the already-created invoice instead of creating a duplicate sale.
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   // Barcode
   const [barcodeValue, setBarcodeValue] = useState('');
@@ -600,7 +603,8 @@ export default function WholesalePOSPage() {
     setIsSubmitting(true);
     setSubmitErrors([]);
 
-    const idempotencyKey = crypto.randomUUID();
+    idempotencyKeyRef.current ??= crypto.randomUUID();
+    const idempotencyKey = idempotencyKeyRef.current;
 
     try {
       const dto: CreateWholesaleSaleInput = {
@@ -653,6 +657,7 @@ export default function WholesalePOSPage() {
       }
 
       setShowInvoice(true);
+      idempotencyKeyRef.current = null;
       setRollLines([]);
       setQtyLines([]);
       setPayments([{ method: 'CASH', amount: '' }]);
