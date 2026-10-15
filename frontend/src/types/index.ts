@@ -381,7 +381,7 @@ export interface CreateProductForm {
 
 export interface CreateBatchForm {
   batchNumber: string;
-  supplierId?: string;
+  supplierId?: string | null;
   notes?: string;
   receivedAt?: string;
 }
