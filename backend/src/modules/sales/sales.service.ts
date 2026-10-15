@@ -95,6 +95,7 @@ export class SalesService {
     if (rollLineCount + qtyLineCount === 0) {
       throw AppError.badRequest('Sale must have at least one line item', 'EMPTY_SALE');
     }
+    this.assertNoDuplicateStockLines(dto);
 
     const invoiceId = await this.prisma.$transaction(
       async (tx) => {
@@ -323,6 +324,12 @@ export class SalesService {
             'Credit sales are disabled. Full payment is required.',
             'FEATURE_DISABLED',
             { feature: 'CREDIT_SALES' },
+          );
+        }
+        if (dueAmount.gt(0) && !dto.customerId) {
+          throw AppError.badRequest(
+            'A customer must be selected when the sale is not fully paid',
+            'CUSTOMER_REQUIRED_FOR_CREDIT',
           );
         }
 
@@ -571,6 +578,7 @@ export class SalesService {
     if (rollLineCount + qtyLineCount === 0) {
       throw AppError.badRequest('Sale must have at least one line item', 'EMPTY_SALE');
     }
+    this.assertNoDuplicateStockLines(dto);
 
     const invoiceId = await this.prisma.$transaction(
       async (tx) => {
@@ -1133,6 +1141,23 @@ export class SalesService {
         invoiceFooter: settingMap.get('invoice_footer') ?? 'Thank you for your business!',
       },
     };
+  }
+
+  // Each line is validated against the DB state read at the start of the
+  // transaction, so the same roll / stock item on two lines would be checked
+  // twice against the full quantity and the second update would overwrite the first.
+  private assertNoDuplicateStockLines(dto: {
+    lines?: { rollId: string }[];
+    quantityLines?: { productStockItemId: string }[];
+  }) {
+    const rollIds = (dto.lines ?? []).map((l) => l.rollId);
+    if (new Set(rollIds).size !== rollIds.length) {
+      throw AppError.badRequest('The same roll appears on more than one line', 'DUPLICATE_ROLL_LINE');
+    }
+    const stockItemIds = (dto.quantityLines ?? []).map((l) => l.productStockItemId);
+    if (new Set(stockItemIds).size !== stockItemIds.length) {
+      throw AppError.badRequest('The same stock item appears on more than one line', 'DUPLICATE_STOCK_ITEM_LINE');
+    }
   }
 
   private async generateInvoiceNumber(

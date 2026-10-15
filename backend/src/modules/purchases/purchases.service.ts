@@ -502,8 +502,12 @@ export class PurchasesService {
       // ── Supplier ledger + balance ──────────────────────────────────────────
       if (payableOriginal.gt(0)) {
         const payableBase = payableOriginal.times(exchangeRate).toDecimalPlaces(2);
-        const supplierBalance = new Prisma.Decimal(supplier.currentBalance.toString());
-        const newBalanceBase = supplierBalance.plus(payableBase);
+        const updatedSupplier = await tx.supplier.update({
+          where: { id: dto.supplierId },
+          data: { currentBalance: { increment: payableBase } },
+          select: { currentBalance: true },
+        });
+        const newBalanceBase = new Prisma.Decimal(updatedSupplier.currentBalance.toString());
 
         await tx.supplierLedgerEntry.create({
           data: {
@@ -520,11 +524,6 @@ export class PurchasesService {
             referenceId: po.id,
             remarks: `Purchase order ${poNumber} — payable (${currencyCode})`,
           },
-        });
-
-        await tx.supplier.update({
-          where: { id: dto.supplierId },
-          data: { currentBalance: newBalanceBase },
         });
       }
 
@@ -605,25 +604,41 @@ export class PurchasesService {
         },
       });
 
-      const newPaid = new Prisma.Decimal(po.paidAmountOriginalCurrency.toString()).plus(paymentAmount);
-      const newDue = currentDue.minus(paymentAmount).toDecimalPlaces(2);
-      let newStatus: InvoiceStatus;
-      if (newDue.lte(0)) newStatus = InvoiceStatus.PAID;
-      else newStatus = InvoiceStatus.PARTIALLY_PAID;
-
-      await tx.purchaseOrder.update({
-        where: { id: purchaseId },
+      // Conditional atomic update: re-checks the due amount under the row lock so
+      // two concurrent payments can't both pass the check above and overpay.
+      const applied = await tx.purchaseOrder.updateMany({
+        where: {
+          id: purchaseId,
+          status: { not: InvoiceStatus.PAID },
+          dueAmountOriginalCurrency: { gte: paymentAmount.toDecimalPlaces(2) },
+        },
         data: {
-          paidAmountOriginalCurrency: newPaid.toDecimalPlaces(2),
-          dueAmountOriginalCurrency: newDue.lt(0) ? new Prisma.Decimal(0) : newDue,
-          status: newStatus,
+          paidAmountOriginalCurrency: { increment: paymentAmount.toDecimalPlaces(2) },
+          dueAmountOriginalCurrency: { decrement: paymentAmount.toDecimalPlaces(2) },
         },
       });
+      if (applied.count === 0) {
+        throw AppError.conflict(
+          'Purchase order due amount changed; refresh and try again',
+          'PAYMENT_EXCEEDS_DUE',
+        );
+      }
 
-      const supplier = await tx.supplier.findUnique({ where: { id: po.supplierId } });
-      if (!supplier) throw AppError.notFound('Supplier not found', 'SUPPLIER_NOT_FOUND');
-      const prevBalance = new Prisma.Decimal(supplier.currentBalance.toString());
-      const newBalance = prevBalance.minus(amountBase).toDecimalPlaces(2);
+      const updatedPo = await tx.purchaseOrder.findUniqueOrThrow({
+        where: { id: purchaseId },
+        select: { dueAmountOriginalCurrency: true },
+      });
+      const newStatus = new Prisma.Decimal(updatedPo.dueAmountOriginalCurrency.toString()).lte(0)
+        ? InvoiceStatus.PAID
+        : InvoiceStatus.PARTIALLY_PAID;
+      await tx.purchaseOrder.update({ where: { id: purchaseId }, data: { status: newStatus } });
+
+      const supplier = await tx.supplier.update({
+        where: { id: po.supplierId },
+        data: { currentBalance: { decrement: amountBase } },
+        select: { currentBalance: true },
+      });
+      const newBalance = new Prisma.Decimal(supplier.currentBalance.toString());
 
       await tx.supplierLedgerEntry.create({
         data: {
@@ -640,11 +655,6 @@ export class PurchasesService {
           referenceId: purchaseId,
           remarks: `Payment for PO ${po.poNumber} via ${dto.paymentMethod}${dto.notes ? ` — ${dto.notes}` : ''}`,
         },
-      });
-
-      await tx.supplier.update({
-        where: { id: po.supplierId },
-        data: { currentBalance: newBalance },
       });
 
       await tx.auditLog.create({
