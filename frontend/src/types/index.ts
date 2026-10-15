@@ -671,6 +671,8 @@ export interface SaleInvoice {
   netAmount: string;
   paidAmount: string;
   dueAmount: string;
+  /** Cash handed back when more than the net amount was tendered. */
+  changeAmount?: string;
   status: InvoiceStatus;
   paymentStatus: PaymentStatus;
   saleType: SaleType;

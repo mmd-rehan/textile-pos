@@ -249,6 +249,20 @@ npm run db:seed          # prisma db seed — re-run the standard seeder
 
 > ⚠️  **Never** run `prisma db push` against a shared, staging, or production database. It rewrites the schema without producing a migration and will silently drop tables / columns. `db push` is only acceptable for throw-away local experiments. The standard flow is always `migrate dev` (locally) → commit the migration → `migrate deploy` (everywhere else).
 
+### Running the backend tests
+
+Unit tests need nothing else. Integration tests boot the real API against a disposable database and **wipe it on every run**, so they only run when `TEST_DATABASE_URL` points to a database whose name ends in `_test` (they never read `DATABASE_URL` or `.env`).
+
+```bash
+cd backend
+npm run test:unit                                    # no database needed
+export TEST_DATABASE_URL="mysql://root:<password>@127.0.0.1:3307/textile_pos_test"
+npm run test:integration                             # migrates + seeds the _test database, then runs
+npm test                                             # both
+```
+
+Create the empty database once, e.g. `CREATE DATABASE textile_pos_test;` in the dev MariaDB container. CI runs the same suite on every pull request (`.github/workflows/backend-tests.yml`).
+
 ### Troubleshooting
 
 | Symptom | Fix |

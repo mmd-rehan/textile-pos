@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, RollStatus } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
+import { lockRowsForUpdate } from '../../database/locking';
 import { PrismaService } from '../../database/prisma.service';
 import { FeatureFlagsService } from '../settings/feature-flags.service';
 import { MarkFinishedDto } from './dto/mark-finished.dto';
@@ -156,6 +157,7 @@ export class RollsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await lockRowsForUpdate(tx, 'rolls', [rollId]);
       const roll = await tx.roll.findUnique({
         where: { id: rollId },
         include: { product: true },
@@ -329,6 +331,7 @@ export class RollsService {
 
   async markFinished(rollId: string, userId: string, dto: MarkFinishedDto) {
     return this.prisma.$transaction(async (tx) => {
+      await lockRowsForUpdate(tx, 'rolls', [rollId]);
       const roll = await tx.roll.findUnique({ where: { id: rollId } });
       if (!roll) throw AppError.notFound('Roll not found', 'ROLL_NOT_FOUND');
 
