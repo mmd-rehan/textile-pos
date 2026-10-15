@@ -1577,6 +1577,12 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
               <span>Total Paid</span>
               <span>{formatAmount(paid, invoiceCurrency)}</span>
             </div>
+            {parseFloat(invoice.changeAmount ?? '0') > 0 && (
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Change</span>
+                <span className="font-mono">{formatAmount(invoice.changeAmount!, invoiceCurrency)}</span>
+              </div>
+            )}
           </div>
         )}
 

@@ -254,6 +254,12 @@ function SaleDetailModal({ id, onClose }: { id: string; onClose: () => void }) {
                 <span className="font-mono text-green-600">{formatAmount(p.amount, currency)}</span>
               </div>
             ))}
+            {parseFloat(invoice.changeAmount ?? '0') > 0 && (
+              <div className="flex justify-between text-gray-600 text-xs">
+                <span>Change</span>
+                <span className="font-mono">{formatAmount(invoice.changeAmount!, currency)}</span>
+              </div>
+            )}
             {parseFloat(invoice.dueAmount) > 0 && (
               <div className="flex justify-between font-semibold text-red-600 border-t pt-1">
                 <span>Due</span>

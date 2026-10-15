@@ -1428,6 +1428,12 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
                   <span className="font-mono text-green-600">{formatAmount(p.amount, invoiceCurrency)}</span>
                 </div>
               ))}
+              {parseFloat(invoice.changeAmount ?? '0') > 0 && (
+                <div className="flex justify-between text-gray-600">
+                  <span>Change</span>
+                  <span className="font-mono">{formatAmount(invoice.changeAmount!, invoiceCurrency)}</span>
+                </div>
+              )}
               {parseFloat(invoice.dueAmount) > 0 && (
                 <div className="flex justify-between font-bold text-red-600">
                   <span>Due</span>

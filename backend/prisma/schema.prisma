@@ -733,6 +733,9 @@ model SaleInvoice {
   netAmount      Decimal       @map("net_amount") @db.Decimal(14, 2)
   paidAmount     Decimal       @default(0.00) @map("paid_amount") @db.Decimal(14, 2)
   dueAmount      Decimal       @map("due_amount") @db.Decimal(14, 2)
+  // Cash handed back when the customer tendered more than the net amount.
+  // paidAmount never exceeds netAmount; payment rows keep the tendered amounts.
+  changeAmount   Decimal       @default(0.00) @map("change_amount") @db.Decimal(14, 2)
   currencyCode   String        @default("PKR") @map("currency_code")
   status         InvoiceStatus @default(DRAFT)
   paymentStatus  PaymentStatus @default(PENDING) @map("payment_status")

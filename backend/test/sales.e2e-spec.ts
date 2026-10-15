@@ -114,6 +114,31 @@ describe('Sales (retail POS)', () => {
     });
   });
 
+  describe('payments', () => {
+    it('records change separately so paid never exceeds the invoice total', async () => {
+      const { rolls } = await createPurchase(ctx, catalog, { rollLengths: [10] });
+      const invoice = await ctx.admin.ok(
+        ctx.admin.post('/sales/retail', { lines: [rollLine(rolls[0].id, 3)], payments: [{ method: 'CASH', amount: 20 }] }),
+      );
+      expect(dec(invoice.netAmount)).toBe(15);
+      expect(dec(invoice.paidAmount)).toBe(15);
+      expect(dec(invoice.changeAmount)).toBe(5);
+      expect(dec(invoice.dueAmount)).toBe(0);
+      expect(invoice.salePayments.map((p: any) => dec(p.amount))).toEqual([20]);
+    });
+
+    it('records no change on an exact or partial payment', async () => {
+      const customer = await createCustomer(ctx.admin);
+      const { rolls } = await createPurchase(ctx, catalog, { rollLengths: [10] });
+      const invoice = await ctx.admin.ok(
+        ctx.admin.post('/sales/retail', { customerId: customer.id, lines: [rollLine(rolls[0].id, 3)], payments: [{ method: 'CASH', amount: 10 }] }),
+      );
+      expect(dec(invoice.paidAmount)).toBe(10);
+      expect(dec(invoice.changeAmount)).toBe(0);
+      expect(dec(invoice.dueAmount)).toBe(5);
+    });
+  });
+
   describe('negative stock prevention', () => {
     it('rejects cutting more than the roll has left', async () => {
       const { rolls } = await createPurchase(ctx, catalog, { rollLengths: [5] });

@@ -11,8 +11,9 @@ import { SettingsService } from './settings.service';
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
+  // Readable by every signed-in user: the POS needs the shop's base currency and
+  // receipt details. Only the PUT requires write:settings.
   @Get('company')
-  @RequirePermissions('read:settings')
   async getCompanySettings() {
     const data = await this.settingsService.getCompanySettings();
     return createSuccessResponse(data);
@@ -51,8 +52,9 @@ export class SettingsController {
     return createSuccessResponse(data);
   }
 
+  // Readable by every signed-in user: the UI hides or enables features (credit
+  // sales, wholesale POS, wastage) from these flags for every role.
   @Get('flags')
-  @RequirePermissions('read:settings')
   async getFeatureFlags() {
     const data = await this.settingsService.getFeatureFlags();
     return createSuccessResponse(data);

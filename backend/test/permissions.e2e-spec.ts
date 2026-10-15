@@ -66,6 +66,10 @@ describe('Authentication and permissions', () => {
     await cashier.ok(cashier.get(`/barcodes/${encodeURIComponent(rolls[0].barcode!)}/lookup`));
     await cashier.ok(cashier.get('/products/pos-search?search=Test&limit=10'));
     await cashier.ok(cashier.get('/settings/tax'));
+    const company = await cashier.ok(cashier.get('/settings/company'));
+    expect(company.company_currency).toBeTruthy();
+    const flags = await cashier.ok(cashier.get('/settings/flags'));
+    expect(flags.creditSales).toBe(true);
     const invoice = await cashier.ok(
       cashier.post('/sales/retail', {
         lines: [{ productId: catalog.rollProductId, rollId: rolls[0].id, billedQuantity: 1, unit: 'YARD', unitPrice: 5 }],

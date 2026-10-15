@@ -321,6 +321,11 @@ export class SalesService {
           .toDecimalPlaces(2);
         const rawDue = grandTotal.minus(totalPaid);
         const dueAmount = rawDue.lt(0) ? new Prisma.Decimal(0) : rawDue.toDecimalPlaces(2);
+        // Anything tendered beyond the total is change handed back, not revenue.
+        const changeAmount = totalPaid.gt(grandTotal)
+          ? totalPaid.minus(grandTotal).toDecimalPlaces(2)
+          : new Prisma.Decimal(0);
+        const paidAmount = totalPaid.minus(changeAmount);
 
         if (dueAmount.gt(0) && !creditSalesEnabled) {
           throw AppError.forbidden(
@@ -364,7 +369,8 @@ export class SalesService {
             taxLabel: taxEnabled ? (taxLabel ?? 'Tax') : null,
             taxAmount,
             netAmount: grandTotal,
-            paidAmount: totalPaid,
+            paidAmount,
+            changeAmount,
             dueAmount,
             currencyCode: baseCurrencyCode,
             status: invoiceStatus,
@@ -545,6 +551,7 @@ export class SalesService {
               taxAmount: taxAmount.toString(),
               grandTotal: grandTotal.toString(),
               totalPaid: totalPaid.toString(),
+              changeAmount: changeAmount.toString(),
               dueAmount: dueAmount.toString(),
               rollLineCount: processedRollLines.length,
               quantityLineCount: processedQuantityLines.length,
@@ -821,6 +828,11 @@ export class SalesService {
           .toDecimalPlaces(2);
         const rawDue = wsGrandTotal.minus(totalPaid);
         const dueAmount = rawDue.lt(0) ? new Prisma.Decimal(0) : rawDue.toDecimalPlaces(2);
+        // Anything tendered beyond the total is change handed back, not revenue.
+        const changeAmount = totalPaid.gt(wsGrandTotal)
+          ? totalPaid.minus(wsGrandTotal).toDecimalPlaces(2)
+          : new Prisma.Decimal(0);
+        const paidAmount = totalPaid.minus(changeAmount);
 
         if (dueAmount.gt(0) && !wsCreditSalesEnabled) {
           throw AppError.forbidden(
@@ -858,7 +870,8 @@ export class SalesService {
             taxLabel: wsTaxEnabled ? (wsTaxLabel ?? 'Tax') : null,
             taxAmount: wsTaxAmount,
             netAmount: wsGrandTotal,
-            paidAmount: totalPaid,
+            paidAmount,
+            changeAmount,
             dueAmount,
             currencyCode: wsBaseCurrencyCode,
             status: invoiceStatus,
@@ -1036,6 +1049,7 @@ export class SalesService {
               taxAmount: wsTaxAmount.toString(),
               grandTotal: wsGrandTotal.toString(),
               totalPaid: totalPaid.toString(),
+              changeAmount: changeAmount.toString(),
               dueAmount: dueAmount.toString(),
               rollLineCount: processedRollLines.length,
               quantityLineCount: processedQuantityLines.length,
