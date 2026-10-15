@@ -82,7 +82,7 @@ describe('Product form', () => {
         wholesalePrice: 10,
       }),
     );
-    expect(screen.getByTestId('location')).toHaveTextContent('/catalog/products');
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/catalog/products'));
   });
 
   it('shows a duplicate product code from the server on the field and stays on the form', async () => {

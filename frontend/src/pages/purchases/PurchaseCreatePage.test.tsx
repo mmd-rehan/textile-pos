@@ -65,7 +65,7 @@ describe('New purchase — roll entry', () => {
         { productId: 'prod-1', originalLengthYard: 60, purchasePricePerYard: 2, salePricePerYard: 5 },
       ],
     });
-    expect(screen.getByTestId('location')).toHaveTextContent('/purchases/po-1');
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/purchases/po-1'));
   });
 
   it('requires an exchange rate for a foreign currency when none is stored, instead of using 1', async () => {
