@@ -58,6 +58,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
           message = 'Foreign key constraint failed on the database.';
           details = exception.meta || null;
           break;
+        case 'P2034': // Write conflict / deadlock — safe for the client to retry
+          status = HttpStatus.CONFLICT;
+          code = 'TRANSACTION_CONFLICT';
+          message = 'Another operation updated the same records at the same time. Please try again.';
+          break;
         case 'P2025': // Record not found
           status = HttpStatus.NOT_FOUND;
           code = 'RECORD_NOT_FOUND';

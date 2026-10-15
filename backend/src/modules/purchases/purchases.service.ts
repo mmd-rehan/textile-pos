@@ -589,23 +589,10 @@ export class PurchasesService {
       const paymentBaseCurrency = await tx.companySetting.findUnique({ where: { key: 'company_currency' } });
       const paymentBaseCurrencyCode = paymentBaseCurrency?.value ?? FALLBACK_BASE_CURRENCY;
 
-      await tx.supplierPayment.create({
-        data: {
-          purchaseOrderId: purchaseId,
-          supplierId: po.supplierId,
-          amountOriginalCurrency: paymentAmount.toDecimalPlaces(2),
-          amountBaseCurrency: amountBase,
-          currencyCode: po.purchaseCurrencyCode,
-          baseCurrencyCodeAtTime: paymentBaseCurrencyCode,
-          exchangeRateToBaseCurrency: exchangeRate,
-          paymentMethod: dto.paymentMethod,
-          paymentDate: new Date(dto.paymentDate),
-          notes: dto.notes,
-        },
-      });
-
-      // Conditional atomic update: re-checks the due amount under the row lock so
-      // two concurrent payments can't both pass the check above and overpay.
+      // Take the exclusive row locks (PO, then supplier) before inserting anything:
+      // the inserts below take shared FK locks on these rows, and upgrading a
+      // shared lock later deadlocks concurrent payments. The conditional update
+      // also re-checks the due amount under the lock so two payments can't overpay.
       const applied = await tx.purchaseOrder.updateMany({
         where: {
           id: purchaseId,
@@ -639,6 +626,22 @@ export class PurchasesService {
         select: { currentBalance: true },
       });
       const newBalance = new Prisma.Decimal(supplier.currentBalance.toString());
+
+      await tx.supplierPayment.create({
+        data: {
+          purchaseOrderId: purchaseId,
+          supplierId: po.supplierId,
+          amountOriginalCurrency: paymentAmount.toDecimalPlaces(2),
+          amountBaseCurrency: amountBase,
+          currencyCode: po.purchaseCurrencyCode,
+          baseCurrencyCodeAtTime: paymentBaseCurrencyCode,
+          exchangeRateToBaseCurrency: exchangeRate,
+          paymentMethod: dto.paymentMethod,
+          paymentDate: new Date(dto.paymentDate),
+          notes: dto.notes,
+        },
+      });
+
 
       await tx.supplierLedgerEntry.create({
         data: {
