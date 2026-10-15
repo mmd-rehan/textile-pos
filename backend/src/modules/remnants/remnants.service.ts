@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, RemnantStatus } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
+import { lockRowsForUpdate } from '../../database/locking';
 import { PrismaService } from '../../database/prisma.service';
 import { FeatureFlagsService } from '../settings/feature-flags.service';
 import { CreateRemnantDto } from './dto/create-remnant.dto';
@@ -60,6 +61,7 @@ export class RemnantsService {
 
     return this.prisma.$transaction(async (tx) => {
       // Lock the source roll within the transaction
+      await lockRowsForUpdate(tx, 'rolls', [dto.rollId]);
       const roll = await tx.roll.findUnique({
         where: { id: dto.rollId },
         select: {

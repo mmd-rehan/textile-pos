@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InvoiceStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
+import { lockRowsForUpdate, nextSequenceValue, trailingCounter } from '../../database/locking';
 import { PrismaService } from '../../database/prisma.service';
 import { FeatureFlagsService } from '../settings/feature-flags.service';
 import { CreateRetailSaleDto } from './dto/create-retail-sale.dto';
@@ -95,9 +96,12 @@ export class SalesService {
     if (rollLineCount + qtyLineCount === 0) {
       throw AppError.badRequest('Sale must have at least one line item', 'EMPTY_SALE');
     }
+    this.assertNoDuplicateStockLines(dto);
 
     const invoiceId = await this.prisma.$transaction(
       async (tx) => {
+        await this.lockSaleRows(tx, dto);
+
         // ── Load units + feature flags ────────────────────────────────────────
         const [yardUnit, meterUnit, baseCurrencySetting, wastageFlag, creditFlag] = await Promise.all([
           tx.unit.findFirst({ where: { abbreviation: 'yd' } }),
@@ -317,12 +321,23 @@ export class SalesService {
           .toDecimalPlaces(2);
         const rawDue = grandTotal.minus(totalPaid);
         const dueAmount = rawDue.lt(0) ? new Prisma.Decimal(0) : rawDue.toDecimalPlaces(2);
+        // Anything tendered beyond the total is change handed back, not revenue.
+        const changeAmount = totalPaid.gt(grandTotal)
+          ? totalPaid.minus(grandTotal).toDecimalPlaces(2)
+          : new Prisma.Decimal(0);
+        const paidAmount = totalPaid.minus(changeAmount);
 
         if (dueAmount.gt(0) && !creditSalesEnabled) {
           throw AppError.forbidden(
             'Credit sales are disabled. Full payment is required.',
             'FEATURE_DISABLED',
             { feature: 'CREDIT_SALES' },
+          );
+        }
+        if (dueAmount.gt(0) && !dto.customerId) {
+          throw AppError.badRequest(
+            'A customer must be selected when the sale is not fully paid',
+            'CUSTOMER_REQUIRED_FOR_CREDIT',
           );
         }
 
@@ -354,7 +369,8 @@ export class SalesService {
             taxLabel: taxEnabled ? (taxLabel ?? 'Tax') : null,
             taxAmount,
             netAmount: grandTotal,
-            paidAmount: totalPaid,
+            paidAmount,
+            changeAmount,
             dueAmount,
             currencyCode: baseCurrencyCode,
             status: invoiceStatus,
@@ -535,6 +551,7 @@ export class SalesService {
               taxAmount: taxAmount.toString(),
               grandTotal: grandTotal.toString(),
               totalPaid: totalPaid.toString(),
+              changeAmount: changeAmount.toString(),
               dueAmount: dueAmount.toString(),
               rollLineCount: processedRollLines.length,
               quantityLineCount: processedQuantityLines.length,
@@ -547,7 +564,7 @@ export class SalesService {
         return invoice.id;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    ).catch((error) => this.replayIdempotentSaleOrThrow(error, idempotencyKey));
 
     return this.prisma.saleInvoice.findUnique({
       where: { id: invoiceId! },
@@ -571,9 +588,12 @@ export class SalesService {
     if (rollLineCount + qtyLineCount === 0) {
       throw AppError.badRequest('Sale must have at least one line item', 'EMPTY_SALE');
     }
+    this.assertNoDuplicateStockLines(dto);
 
     const invoiceId = await this.prisma.$transaction(
       async (tx) => {
+        await this.lockSaleRows(tx, dto);
+
         // ── Load units + feature flags ────────────────────────────────────────
         const [yardUnit, meterUnit, wsBaseCurrencySetting, wsWastageFlag, wsCreditFlag] = await Promise.all([
           tx.unit.findFirst({ where: { abbreviation: 'yd' } }),
@@ -808,6 +828,11 @@ export class SalesService {
           .toDecimalPlaces(2);
         const rawDue = wsGrandTotal.minus(totalPaid);
         const dueAmount = rawDue.lt(0) ? new Prisma.Decimal(0) : rawDue.toDecimalPlaces(2);
+        // Anything tendered beyond the total is change handed back, not revenue.
+        const changeAmount = totalPaid.gt(wsGrandTotal)
+          ? totalPaid.minus(wsGrandTotal).toDecimalPlaces(2)
+          : new Prisma.Decimal(0);
+        const paidAmount = totalPaid.minus(changeAmount);
 
         if (dueAmount.gt(0) && !wsCreditSalesEnabled) {
           throw AppError.forbidden(
@@ -845,7 +870,8 @@ export class SalesService {
             taxLabel: wsTaxEnabled ? (wsTaxLabel ?? 'Tax') : null,
             taxAmount: wsTaxAmount,
             netAmount: wsGrandTotal,
-            paidAmount: totalPaid,
+            paidAmount,
+            changeAmount,
             dueAmount,
             currencyCode: wsBaseCurrencyCode,
             status: invoiceStatus,
@@ -1023,6 +1049,7 @@ export class SalesService {
               taxAmount: wsTaxAmount.toString(),
               grandTotal: wsGrandTotal.toString(),
               totalPaid: totalPaid.toString(),
+              changeAmount: changeAmount.toString(),
               dueAmount: dueAmount.toString(),
               rollLineCount: processedRollLines.length,
               quantityLineCount: processedQuantityLines.length,
@@ -1037,7 +1064,7 @@ export class SalesService {
         return invoice.id;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    ).catch((error) => this.replayIdempotentSaleOrThrow(error, idempotencyKey));
 
     return this.prisma.saleInvoice.findUnique({
       where: { id: invoiceId! },
@@ -1135,6 +1162,50 @@ export class SalesService {
     };
   }
 
+  // Each line is validated against the DB state read at the start of the
+  // transaction, so the same roll / stock item on two lines would be checked
+  // twice against the full quantity and the second update would overwrite the first.
+  private assertNoDuplicateStockLines(dto: {
+    lines?: { rollId: string }[];
+    quantityLines?: { productStockItemId: string }[];
+  }) {
+    const rollIds = (dto.lines ?? []).map((l) => l.rollId);
+    if (new Set(rollIds).size !== rollIds.length) {
+      throw AppError.badRequest('The same roll appears on more than one line', 'DUPLICATE_ROLL_LINE');
+    }
+    const stockItemIds = (dto.quantityLines ?? []).map((l) => l.productStockItemId);
+    if (new Set(stockItemIds).size !== stockItemIds.length) {
+      throw AppError.badRequest('The same stock item appears on more than one line', 'DUPLICATE_STOCK_ITEM_LINE');
+    }
+  }
+
+  /**
+   * Two requests with the same Idempotency-Key can both pass the up-front check
+   * (e.g. a double-clicked Pay button). The loser hits the unique key on insert;
+   * answer it with the invoice the winner created instead of an error.
+   */
+  private async replayIdempotentSaleOrThrow(error: unknown, idempotencyKey?: string): Promise<string> {
+    if (idempotencyKey && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const existing = await this.prisma.saleInvoice.findUnique({ where: { idempotencyKey }, select: { id: true } });
+      if (existing) return existing.id;
+    }
+    throw error;
+  }
+
+  /**
+   * Locks every roll, stock item and the customer the sale touches before any
+   * other read, so concurrent sales on the same stock queue up and re-check
+   * availability instead of deadlocking or overselling.
+   */
+  private async lockSaleRows(
+    tx: Prisma.TransactionClient,
+    dto: { lines?: { rollId: string }[]; quantityLines?: { productStockItemId: string }[]; customerId?: string },
+  ) {
+    await lockRowsForUpdate(tx, 'rolls', (dto.lines ?? []).map((l) => l.rollId));
+    await lockRowsForUpdate(tx, 'product_stock_items', (dto.quantityLines ?? []).map((l) => l.productStockItemId));
+    await lockRowsForUpdate(tx, 'customers', [dto.customerId]);
+  }
+
   private async generateInvoiceNumber(
     tx: Prisma.TransactionClient,
     series: 'INV' | 'WHL' = 'INV',
@@ -1145,10 +1216,15 @@ export class SalesService {
     const d = String(now.getDate()).padStart(2, '0');
     const datePrefix = `${series}-${y}${m}${d}`;
 
-    const count = await tx.saleInvoice.count({
-      where: { invoiceNumber: { startsWith: datePrefix } },
+    const next = await nextSequenceValue(tx, datePrefix, async () => {
+      const last = await tx.saleInvoice.findFirst({
+        where: { invoiceNumber: { startsWith: `${datePrefix}-` } },
+        orderBy: { invoiceNumber: 'desc' },
+        select: { invoiceNumber: true },
+      });
+      return trailingCounter(last?.invoiceNumber);
     });
 
-    return `${datePrefix}-${String(count + 1).padStart(4, '0')}`;
+    return `${datePrefix}-${String(next).padStart(4, '0')}`;
   }
 }

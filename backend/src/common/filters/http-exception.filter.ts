@@ -8,6 +8,22 @@ export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger('HttpExceptionFilter');
 
   catch(exception: any, host: ArgumentsHost) {
+    try {
+      this.handle(exception, host);
+    } catch (filterError) {
+      // The filter must never throw: an exception escaping here crashes the process.
+      this.logger.error('Exception filter failed', filterError instanceof Error ? filterError.stack : String(filterError));
+      const response = host.switchToHttp().getResponse<Response>();
+      if (!response.headersSent) {
+        response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+          success: false,
+          error: { code: 'INTERNAL_SERVER_ERROR', message: 'Internal server error', details: null, requestId: null },
+        });
+      }
+    }
+  }
+
+  private handle(exception: any, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest();
@@ -49,7 +65,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
         case 'P2002': // Unique constraint violation
           status = HttpStatus.CONFLICT;
           code = 'UNIQUE_CONSTRAINT_VIOLATION';
-          message = `Unique constraint failed on field(s): ${(exception.meta?.target as string[])?.join(', ') || 'unknown'}`;
+          // Prisma reports the target as a field list on most connectors but as the
+          // index name (a string) on MySQL, so normalise both.
+          message = `Unique constraint failed on field(s): ${describeTarget(exception.meta?.target)}`;
           details = exception.meta || null;
           break;
         case 'P2003': // Foreign key constraint violation
@@ -57,6 +75,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
           code = 'FOREIGN_KEY_CONSTRAINT_VIOLATION';
           message = 'Foreign key constraint failed on the database.';
           details = exception.meta || null;
+          break;
+        case 'P2034': // Write conflict / deadlock — safe for the client to retry
+          status = HttpStatus.CONFLICT;
+          code = 'TRANSACTION_CONFLICT';
+          message = 'Another operation updated the same records at the same time. Please try again.';
           break;
         case 'P2025': // Record not found
           status = HttpStatus.NOT_FOUND;
@@ -120,4 +143,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       },
     });
   }
+}
+
+function describeTarget(target: unknown): string {
+  if (Array.isArray(target)) return target.join(', ') || 'unknown';
+  if (typeof target === 'string' && target) return target;
+  return 'unknown';
 }

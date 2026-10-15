@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse } from '../../common/utils/response';
+import { nextSequenceValue, trailingCounter } from '../../database/locking';
 import { PrismaService } from '../../database/prisma.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { CreateSupplierPaymentDto } from './dto/create-supplier-payment.dto';
@@ -431,12 +432,11 @@ export class PurchasesService {
           });
 
           if (stockItem) {
-            // Increment quantity and update prices
-            const newQty = new Prisma.Decimal(stockItem.quantityOnHand.toString()).plus(item.qty);
+            // Increment quantity atomically (a concurrent sale may be changing it) and update prices
             stockItem = await tx.productStockItem.update({
               where: { id: stockItem.id },
               data: {
-                quantityOnHand: newQty,
+                quantityOnHand: { increment: item.qty },
                 purchasePricePerUnitBaseCurrency: item.priceBase,
                 salePricePerUnit: item.salePrice,
                 ...(item.location ? { location: item.location } : {}),
@@ -502,8 +502,12 @@ export class PurchasesService {
       // ── Supplier ledger + balance ──────────────────────────────────────────
       if (payableOriginal.gt(0)) {
         const payableBase = payableOriginal.times(exchangeRate).toDecimalPlaces(2);
-        const supplierBalance = new Prisma.Decimal(supplier.currentBalance.toString());
-        const newBalanceBase = supplierBalance.plus(payableBase);
+        const updatedSupplier = await tx.supplier.update({
+          where: { id: dto.supplierId },
+          data: { currentBalance: { increment: payableBase } },
+          select: { currentBalance: true },
+        });
+        const newBalanceBase = new Prisma.Decimal(updatedSupplier.currentBalance.toString());
 
         await tx.supplierLedgerEntry.create({
           data: {
@@ -520,11 +524,6 @@ export class PurchasesService {
             referenceId: po.id,
             remarks: `Purchase order ${poNumber} — payable (${currencyCode})`,
           },
-        });
-
-        await tx.supplier.update({
-          where: { id: dto.supplierId },
-          data: { currentBalance: newBalanceBase },
         });
       }
 
@@ -590,6 +589,44 @@ export class PurchasesService {
       const paymentBaseCurrency = await tx.companySetting.findUnique({ where: { key: 'company_currency' } });
       const paymentBaseCurrencyCode = paymentBaseCurrency?.value ?? FALLBACK_BASE_CURRENCY;
 
+      // Take the exclusive row locks (PO, then supplier) before inserting anything:
+      // the inserts below take shared FK locks on these rows, and upgrading a
+      // shared lock later deadlocks concurrent payments. The conditional update
+      // also re-checks the due amount under the lock so two payments can't overpay.
+      const applied = await tx.purchaseOrder.updateMany({
+        where: {
+          id: purchaseId,
+          status: { not: InvoiceStatus.PAID },
+          dueAmountOriginalCurrency: { gte: paymentAmount.toDecimalPlaces(2) },
+        },
+        data: {
+          paidAmountOriginalCurrency: { increment: paymentAmount.toDecimalPlaces(2) },
+          dueAmountOriginalCurrency: { decrement: paymentAmount.toDecimalPlaces(2) },
+        },
+      });
+      if (applied.count === 0) {
+        throw AppError.conflict(
+          'Purchase order due amount changed; refresh and try again',
+          'PAYMENT_EXCEEDS_DUE',
+        );
+      }
+
+      const updatedPo = await tx.purchaseOrder.findUniqueOrThrow({
+        where: { id: purchaseId },
+        select: { dueAmountOriginalCurrency: true },
+      });
+      const newStatus = new Prisma.Decimal(updatedPo.dueAmountOriginalCurrency.toString()).lte(0)
+        ? InvoiceStatus.PAID
+        : InvoiceStatus.PARTIALLY_PAID;
+      await tx.purchaseOrder.update({ where: { id: purchaseId }, data: { status: newStatus } });
+
+      const supplier = await tx.supplier.update({
+        where: { id: po.supplierId },
+        data: { currentBalance: { decrement: amountBase } },
+        select: { currentBalance: true },
+      });
+      const newBalance = new Prisma.Decimal(supplier.currentBalance.toString());
+
       await tx.supplierPayment.create({
         data: {
           purchaseOrderId: purchaseId,
@@ -605,25 +642,6 @@ export class PurchasesService {
         },
       });
 
-      const newPaid = new Prisma.Decimal(po.paidAmountOriginalCurrency.toString()).plus(paymentAmount);
-      const newDue = currentDue.minus(paymentAmount).toDecimalPlaces(2);
-      let newStatus: InvoiceStatus;
-      if (newDue.lte(0)) newStatus = InvoiceStatus.PAID;
-      else newStatus = InvoiceStatus.PARTIALLY_PAID;
-
-      await tx.purchaseOrder.update({
-        where: { id: purchaseId },
-        data: {
-          paidAmountOriginalCurrency: newPaid.toDecimalPlaces(2),
-          dueAmountOriginalCurrency: newDue.lt(0) ? new Prisma.Decimal(0) : newDue,
-          status: newStatus,
-        },
-      });
-
-      const supplier = await tx.supplier.findUnique({ where: { id: po.supplierId } });
-      if (!supplier) throw AppError.notFound('Supplier not found', 'SUPPLIER_NOT_FOUND');
-      const prevBalance = new Prisma.Decimal(supplier.currentBalance.toString());
-      const newBalance = prevBalance.minus(amountBase).toDecimalPlaces(2);
 
       await tx.supplierLedgerEntry.create({
         data: {
@@ -640,11 +658,6 @@ export class PurchasesService {
           referenceId: purchaseId,
           remarks: `Payment for PO ${po.poNumber} via ${dto.paymentMethod}${dto.notes ? ` — ${dto.notes}` : ''}`,
         },
-      });
-
-      await tx.supplier.update({
-        where: { id: po.supplierId },
-        data: { currentBalance: newBalance },
       });
 
       await tx.auditLog.create({
@@ -692,10 +705,15 @@ export class PurchasesService {
     const d = String(now.getDate()).padStart(2, '0');
     const datePrefix = `PO-${y}${m}${d}`;
 
-    const count = await tx.purchaseOrder.count({
-      where: { poNumber: { startsWith: datePrefix } },
+    const next = await nextSequenceValue(tx, datePrefix, async () => {
+      const last = await tx.purchaseOrder.findFirst({
+        where: { poNumber: { startsWith: `${datePrefix}-` } },
+        orderBy: { poNumber: 'desc' },
+        select: { poNumber: true },
+      });
+      return trailingCounter(last?.poNumber);
     });
 
-    return `${datePrefix}-${String(count + 1).padStart(4, '0')}`;
+    return `${datePrefix}-${String(next).padStart(4, '0')}`;
   }
 }

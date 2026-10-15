@@ -166,11 +166,18 @@ export class CustomersService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const customer = await tx.customer.findUnique({ where: { id } });
+      const customer = await tx.customer.findUnique({ where: { id }, select: { id: true } });
       if (!customer) throw AppError.notFound('Customer not found', 'CUSTOMER_NOT_FOUND');
 
-      const prevBalance = new Prisma.Decimal(customer.currentBalance.toString());
-      const newBalance = prevBalance.minus(amount).toDecimalPlaces(2);
+      // Atomic decrement (row-locks the customer) so concurrent payments/sales
+      // can't overwrite each other's balance change.
+      const updated = await tx.customer.update({
+        where: { id },
+        data: { currentBalance: { decrement: amount } },
+        select: { currentBalance: true },
+      });
+      const newBalance = new Prisma.Decimal(updated.currentBalance.toString());
+      const prevBalance = newBalance.plus(amount);
 
       const payment = await tx.customerPayment.create({
         data: {
@@ -193,11 +200,6 @@ export class CustomersService {
           referenceId: payment.id,
           remarks: dto.notes ?? `Payment received — ${dto.paymentMethod}`,
         },
-      });
-
-      await tx.customer.update({
-        where: { id },
-        data: { currentBalance: newBalance },
       });
 
       await tx.auditLog.create({

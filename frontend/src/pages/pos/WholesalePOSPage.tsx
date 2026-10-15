@@ -161,6 +161,9 @@ export default function WholesalePOSPage() {
   const { code: baseCurrencyCode } = useBaseCurrency();
   const barcodeRef = useRef<HTMLInputElement>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Kept across retries of the same checkout so a resend after a lost response
+  // returns the already-created invoice instead of creating a duplicate sale.
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   // Barcode
   const [barcodeValue, setBarcodeValue] = useState('');
@@ -600,7 +603,8 @@ export default function WholesalePOSPage() {
     setIsSubmitting(true);
     setSubmitErrors([]);
 
-    const idempotencyKey = crypto.randomUUID();
+    idempotencyKeyRef.current ??= crypto.randomUUID();
+    const idempotencyKey = idempotencyKeyRef.current;
 
     try {
       const dto: CreateWholesaleSaleInput = {
@@ -653,6 +657,7 @@ export default function WholesalePOSPage() {
       }
 
       setShowInvoice(true);
+      idempotencyKeyRef.current = null;
       setRollLines([]);
       setQtyLines([]);
       setPayments([{ method: 'CASH', amount: '' }]);
@@ -1442,7 +1447,7 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
   return (
     <div className="space-y-4">
       {/* Print area */}
-      <div id="wholesale-invoice-print" className="bg-white rounded-lg border border-gray-200 p-6">
+      <div id="wholesale-invoice-print" className="bg-white rounded-lg border border-gray-200 p-6 print:border-0 print:p-0">
         {/* Company */}
         <div className="text-center mb-4 pb-4 border-b border-gray-200">
           <h2 className="text-lg font-bold text-gray-900">{company.name}</h2>
@@ -1572,6 +1577,12 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
               <span>Total Paid</span>
               <span>{formatAmount(paid, invoiceCurrency)}</span>
             </div>
+            {parseFloat(invoice.changeAmount ?? '0') > 0 && (
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Change</span>
+                <span className="font-mono">{formatAmount(invoice.changeAmount!, invoiceCurrency)}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1601,7 +1612,7 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 print:hidden">
         <button
           onClick={onPrint}
           className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -1617,13 +1628,6 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
           New Sale
         </button>
       </div>
-
-      <style>{`
-        @media print {
-          body > * { display: none !important; }
-          #wholesale-invoice-print { display: block !important; }
-        }
-      `}</style>
     </div>
   );
 }

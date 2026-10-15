@@ -160,6 +160,9 @@ export default function RetailPOSPage() {
   const barcodeRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Kept across retries of the same checkout so a resend after a lost response
+  // returns the already-created invoice instead of creating a duplicate sale.
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const [barcodeValue, setBarcodeValue] = useState('');
   const [scanLoading, setScanLoading] = useState(false);
@@ -539,10 +542,15 @@ export default function RetailPOSPage() {
 
   async function handleCompleteSale() {
     if (!canSubmit) return;
+    if (!customerId && getInvoiceTotals(cartLines, payments, taxEnabled, taxRatePercent).due > 0.005) {
+      setSubmitErrors(['Select a customer to leave a balance due, or collect full payment.']);
+      return;
+    }
     setIsSubmitting(true);
     setSubmitErrors([]);
 
-    const idempotencyKey = crypto.randomUUID();
+    idempotencyKeyRef.current ??= crypto.randomUUID();
+    const idempotencyKey = idempotencyKeyRef.current;
 
     const rollLines = cartLines.filter((l): l is RollCartLine => l.lineType === 'ROLL');
     const qtyLines = cartLines.filter((l): l is QuantityCartLine => l.lineType === 'QUANTITY');
@@ -587,6 +595,7 @@ export default function RetailPOSPage() {
       }
 
       setShowReceipt(true);
+      idempotencyKeyRef.current = null;
       setCartLines([]);
       setPayments([{ method: 'CASH', amount: '' }]);
       setNotes('');
@@ -1314,13 +1323,6 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
 
   return (
     <Modal open onClose={onClose} title="Sale Receipt" size="md">
-      <style>{`
-        @media print {
-          body > *:not(#print-receipt-root) { display: none !important; }
-          #print-receipt-root { display: block !important; position: fixed; top: 0; left: 0; width: 100%; }
-        }
-      `}</style>
-
       <div id="print-receipt-root">
         <div id="receipt-content" className="space-y-4 text-sm">
           <div className="text-center border-b border-gray-200 pb-4">
@@ -1419,6 +1421,12 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
                   <span className="font-mono text-green-600">{formatAmount(p.amount, invoiceCurrency)}</span>
                 </div>
               ))}
+              {parseFloat(invoice.changeAmount ?? '0') > 0 && (
+                <div className="flex justify-between text-gray-600">
+                  <span>Change</span>
+                  <span className="font-mono">{formatAmount(invoice.changeAmount!, invoiceCurrency)}</span>
+                </div>
+              )}
               {parseFloat(invoice.dueAmount) > 0 && (
                 <div className="flex justify-between font-bold text-red-600">
                   <span>Due</span>
