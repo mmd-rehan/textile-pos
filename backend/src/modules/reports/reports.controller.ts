@@ -1,13 +1,34 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, StreamableFile, UseGuards } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { ReportsExportService } from './reports-export.service';
 import { ReportsService } from './reports.service';
+import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(
+    private readonly reportsService: ReportsService,
+    private readonly reportsExportService: ReportsExportService,
+  ) {}
+
+  // Excel export of any report, with the same filters as its screen.
+  // Permission is checked per report in the service.
+  @Get('export/:report')
+  async exportReport(
+    @Param('report') report: string,
+    @Query() filters: Record<string, string | undefined>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const file = await this.reportsExportService.export(report, filters, user.permissions);
+    return new StreamableFile(file.buffer, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      disposition: `attachment; filename="${file.filename}"`,
+    });
+  }
 
   @Get('dashboard')
   @RequirePermissions('read:sales')

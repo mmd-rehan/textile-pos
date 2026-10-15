@@ -119,4 +119,22 @@ export const reportsApi = {
     limit?: number;
   }): Promise<{ data: any[]; meta: any; totals: { orderCount: number; totalBaseCurrency: string } }> =>
     apiClient.get('/reports/purchases', { params }),
+
+  // Returns the raw axios response so the filename header is available.
+  exportReport: (
+    report: ReportExportName,
+    params: Record<string, string | number | undefined>,
+  ): Promise<{ data: Blob; headers: Record<string, string> }> =>
+    apiClient.get(`/reports/export/${report}`, { params, responseType: 'blob' }),
 };
+
+export type ReportExportName =
+  | 'sales'
+  | 'sales-monthly'
+  | 'sales-products'
+  | 'inventory-stock'
+  | 'inventory-low-stock'
+  | 'inventory-movements'
+  | 'customers-outstanding'
+  | 'wastage'
+  | 'purchases';

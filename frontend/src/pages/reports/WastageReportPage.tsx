@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Download, Trash2 } from 'lucide-react';
+import { AlertTriangle, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { reportsApi } from '../../api/reports';
+import ExportButton from '../../components/ui/ExportButton';
 import Pagination from '../../components/ui/Pagination';
 
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -30,10 +31,7 @@ export default function WastageReportPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Fabric wastage from cutting and reconciliation</p>
         </div>
-        <button className="flex items-center gap-2 text-sm border border-gray-300 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-50">
-          <Download className="w-4 h-4" />
-          Export (coming soon)
-        </button>
+        <ExportButton report="wastage" params={{ startDate, endDate }} />
       </div>
 
       {/* Filters */}

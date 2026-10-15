@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Download, Package } from 'lucide-react';
+import { AlertTriangle, Package } from 'lucide-react';
 import { useState } from 'react';
 import { reportsApi } from '../../api/reports';
+import ExportButton from '../../components/ui/ExportButton';
 import Pagination from '../../components/ui/Pagination';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
@@ -52,10 +53,9 @@ export default function InventoryReportPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Stock levels, low-stock alerts, and movements</p>
         </div>
-        <button className="flex items-center gap-2 text-sm border border-gray-300 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-50">
-          <Download className="w-4 h-4" />
-          Export (coming soon)
-        </button>
+        {view === 'stock' && <ExportButton report="inventory-stock" params={{ productType }} />}
+        {view === 'lowstock' && <ExportButton report="inventory-low-stock" params={{ threshold }} />}
+        {view === 'movements' && <ExportButton report="inventory-movements" params={{ startDate, endDate, movementType }} />}
       </div>
 
       {/* View toggle */}
