@@ -94,13 +94,6 @@ function SaleDetailModal({ id, onClose }: { id: string; onClose: () => void }) {
 
   return (
     <Modal open onClose={onClose} title={`Invoice ${invoice.invoiceNumber}`} size="lg">
-      <style>{`
-        @media print {
-          body > *:not(#print-sale-detail) { display: none !important; }
-          #print-sale-detail { display: block !important; position: fixed; top: 0; left: 0; width: 100%; }
-        }
-      `}</style>
-
       <div id="print-sale-detail" className="space-y-5 text-sm">
         {/* Header */}
         {receiptData && (
