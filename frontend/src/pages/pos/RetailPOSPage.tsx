@@ -1314,13 +1314,6 @@ function ReceiptModal({ data, onClose }: { data: ReceiptData; onClose: () => voi
 
   return (
     <Modal open onClose={onClose} title="Sale Receipt" size="md">
-      <style>{`
-        @media print {
-          body > *:not(#print-receipt-root) { display: none !important; }
-          #print-receipt-root { display: block !important; position: fixed; top: 0; left: 0; width: 100%; }
-        }
-      `}</style>
-
       <div id="print-receipt-root">
         <div id="receipt-content" className="space-y-4 text-sm">
           <div className="text-center border-b border-gray-200 pb-4">

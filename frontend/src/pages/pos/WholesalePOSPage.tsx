@@ -1442,7 +1442,7 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
   return (
     <div className="space-y-4">
       {/* Print area */}
-      <div id="wholesale-invoice-print" className="bg-white rounded-lg border border-gray-200 p-6">
+      <div id="wholesale-invoice-print" className="bg-white rounded-lg border border-gray-200 p-6 print:border-0 print:p-0">
         {/* Company */}
         <div className="text-center mb-4 pb-4 border-b border-gray-200">
           <h2 className="text-lg font-bold text-gray-900">{company.name}</h2>
@@ -1601,7 +1601,7 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 print:hidden">
         <button
           onClick={onPrint}
           className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -1617,13 +1617,6 @@ function WholesaleInvoiceView({ receiptData, challanNumber, deliveryAddress, onP
           New Sale
         </button>
       </div>
-
-      <style>{`
-        @media print {
-          body > * { display: none !important; }
-          #wholesale-invoice-print { display: block !important; }
-        }
-      `}</style>
     </div>
   );
 }

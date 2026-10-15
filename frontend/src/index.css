@@ -35,3 +35,14 @@ body {
     background-color: #ffffff;
   }
 }
+
+/* Printing while a Modal is open prints only the modal (see components/ui/Modal.tsx). */
+@media print {
+  body:has(> [data-modal-root]) {
+    display: block;
+    background: #fff;
+  }
+  body:has(> [data-modal-root]) > #root {
+    display: none !important;
+  }
+}
