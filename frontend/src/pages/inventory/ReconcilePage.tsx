@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, CheckCircle, Info, TrendingDown, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { apiErrorMessage } from '../../api/errors';
 import { rollsApi } from '../../api/rolls';
 import Badge from '../../components/ui/Badge';
 import { useFeatureFlag } from '../../hooks/useFeatureFlags';
+import { dec, isValidDecimalInput } from '../../lib/pos-math';
 import { useAppStore } from '../../store/useAppStore';
 
 function DiffPreview({ expected, physical }: { expected: number; physical: number | null }) {
@@ -75,18 +77,23 @@ export default function ReconcilePage() {
       navigate(`/inventory/rolls/${id}`);
     },
     onError: (err: any) => {
-      showNotification(err?.response?.data?.message ?? 'Reconciliation failed', 'error');
+      showNotification(apiErrorMessage(err, 'Reconciliation failed'), 'error');
     },
   });
 
   const roll = data?.data;
   const systemRemaining = roll ? parseFloat(roll.remainingLengthYard) : 0;
-  const physicalNum = physicalLength ? parseFloat(physicalLength) : null;
-  const hasDiff = physicalNum !== null && Math.abs(physicalNum - systemRemaining) > 0.001;
+  // Lengths are compared as decimals (4 places, like the server), not floats.
+  const lengthValid = isValidDecimalInput(physicalLength, 4);
+  const lengthError = physicalLength.trim() !== '' && !lengthValid
+    ? 'Enter a length of 0 or more with at most 4 decimal places.'
+    : null;
+  const physicalNum = lengthValid ? dec(physicalLength).toNumber() : null;
+  const hasDiff = lengthValid && roll ? !dec(physicalLength).eq(dec(roll.remainingLengthYard)) : false;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!physicalLength || isNaN(parseFloat(physicalLength))) {
+    if (!lengthValid) {
       showNotification('Enter a valid physical length', 'error');
       return;
     }
@@ -95,7 +102,7 @@ export default function ReconcilePage() {
       return;
     }
     mutate({
-      physicalLengthYard: parseFloat(physicalLength).toFixed(4),
+      physicalLengthYard: dec(physicalLength).toFixed(4),
       reason: reason.trim() || 'No discrepancy',
       remarks: remarks.trim() || undefined,
       createRemnant,
@@ -144,32 +151,40 @@ export default function ReconcilePage() {
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
         {/* Physical length */}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+          <label htmlFor="physical-length" className="block text-sm font-semibold text-gray-700 mb-1.5">
             Physical Remaining Length (yards) <span className="text-red-500">*</span>
           </label>
           <input
+            id="physical-length"
             type="number"
             step="0.01"
             min="0"
+            aria-invalid={!!lengthError}
+            aria-describedby="physical-length-help"
             value={physicalLength}
             onChange={(e) => setPhysicalLength(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
             placeholder={`System says: ${systemRemaining.toFixed(2)} yd`}
           />
-          <p className="mt-1 text-xs text-gray-500">Measure the roll physically and enter the result.</p>
+          {lengthError ? (
+            <p id="physical-length-help" className="mt-1 text-xs text-red-600">{lengthError}</p>
+          ) : (
+            <p id="physical-length-help" className="mt-1 text-xs text-gray-500">Measure the roll physically and enter the result.</p>
+          )}
         </div>
 
         {/* Difference preview */}
-        {physicalLength && (
+        {lengthValid && (
           <DiffPreview expected={systemRemaining} physical={physicalNum} />
         )}
 
         {/* Reason — always visible but required only on mismatch */}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+          <label htmlFor="reconcile-reason" className="block text-sm font-semibold text-gray-700 mb-1.5">
             Reason {hasDiff && <span className="text-red-500">*</span>}
           </label>
           <textarea
+            id="reconcile-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={2}
@@ -180,8 +195,9 @@ export default function ReconcilePage() {
 
         {/* Remarks */}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1.5">Remarks (optional)</label>
+          <label htmlFor="reconcile-remarks" className="block text-sm font-semibold text-gray-700 mb-1.5">Remarks (optional)</label>
           <input
+            id="reconcile-remarks"
             type="text"
             value={remarks}
             onChange={(e) => setRemarks(e.target.value)}
@@ -258,7 +274,7 @@ export default function ReconcilePage() {
           </button>
           <button
             type="submit"
-            disabled={isPending || !physicalLength}
+            disabled={isPending || !lengthValid}
             className="px-5 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
           >
             {isPending ? 'Saving…' : 'Save Reconciliation'}

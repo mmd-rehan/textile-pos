@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Barcode, CheckSquare, ClipboardList, Copy, Printer } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { apiErrorMessage } from '../../api/errors';
 import { inventoryApi } from '../../api/inventory';
 import { rollsApi } from '../../api/rolls';
 import RollLabelModal from '../../components/inventory/RollLabelModal';
@@ -46,7 +47,7 @@ function MarkFinishedModal({ rollId, onClose }: { rollId: string; onClose: () =>
       onClose();
     },
     onError: (err: any) => {
-      showNotification(err?.response?.data?.message ?? 'Failed to mark roll as finished', 'error');
+      showNotification(apiErrorMessage(err, 'Failed to mark roll as finished'), 'error');
     },
   });
 

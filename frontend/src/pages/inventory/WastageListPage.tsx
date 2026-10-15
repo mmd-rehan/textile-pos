@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, BarChart2, BarChart3, RefreshCw, Users } from 'lucide-react';
 import { useState } from 'react';
+import { apiErrorMessage } from '../../api/errors';
 import { rollsApi } from '../../api/rolls';
 import { type ManualWastagePayload, type WastageSourceType, wastageApi } from '../../api/wastage';
 import Pagination from '../../components/ui/Pagination';
@@ -61,7 +62,7 @@ function ManualWastageModal({ onClose, onSuccess }: ManualWastageModalProps) {
       onSuccess();
     },
     onError: (err: any) => {
-      setError(err?.response?.data?.message ?? 'Failed to record wastage');
+      setError(apiErrorMessage(err, 'Failed to record wastage'));
     },
   });
 

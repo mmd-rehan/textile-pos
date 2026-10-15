@@ -15,6 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { apiErrorCode } from '../../api/errors';
 import { customersApi } from '../../api/customers';
 import { inventoryApi } from '../../api/inventory';
 import { salesApi } from '../../api/sales';
@@ -23,6 +24,8 @@ import Modal from '../../components/ui/Modal';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { useFeatureFlag } from '../../hooks/useFeatureFlags';
+import { useMeterToYardFactor } from '../../hooks/useMeterToYardFactor';
+import { convertUnitPrice, dec, invoiceTotals, quantityLineValues, rollLineValues } from '../../lib/pos-math';
 import { useAppStore } from '../../store/useAppStore';
 import type {
   BarcodeLookupResult,
@@ -34,8 +37,6 @@ import type {
 } from '../../types';
 import CustomerQuickCreateModal from './CustomerQuickCreateModal';
 
-const M_TO_YD = 1.093613;
-const YD_TO_M = 0.9144;
 
 const PAYMENT_METHODS = [
   { value: 'CASH', label: 'Cash' },
@@ -105,28 +106,25 @@ interface StockPickerState {
 }
 
 // ── Line value helpers ───────────────────────────────────────────────────────
+// Decimal maths lives in lib/pos-math (mirrors the backend); these adapt it to
+// numbers for display.
 
-function getRollLineValues(line: RollCartLine) {
-  const factor = line.unit === 'METER' ? M_TO_YD : 1;
-  const billed = parseFloat(line.billedQuantity) || 0;
-  const actualCut = line.actualCutQuantity !== '' ? parseFloat(line.actualCutQuantity) || 0 : billed;
-  const billedYard = billed * factor;
-  const actualCutYard = actualCut * factor;
-  const remaining = parseFloat(line.remainingLengthYard) || 0;
-  const remainingAfterCut = remaining - actualCutYard;
-  const wastageYard = Math.max(0, actualCutYard - billedYard);
-  const unitPrice = parseFloat(line.unitPrice) || 0;
-  const discount = parseFloat(line.discountAmount) || 0;
-  const grossSubTotal = billed * unitPrice;
-  const subTotal = Math.max(0, grossSubTotal - discount);
-  return { billedYard, actualCutYard, remainingAfterCut, wastageYard, grossSubTotal, subTotal };
+function getRollLineValues(line: RollCartLine, meterToYard: string) {
+  const v = rollLineValues(line, meterToYard);
+  return {
+    billedYard: v.billedYard.toNumber(),
+    actualCutYard: v.actualCutYard.toNumber(),
+    remainingAfterCut: v.remainingAfterCut.toNumber(),
+    wastageYard: v.wastageYard.toNumber(),
+    grossSubTotal: v.grossSubTotal.toNumber(),
+    subTotal: v.subTotal.toNumber(),
+    exceedsRoll: v.exceedsRoll,
+    negativeSubtotal: v.negativeSubtotal,
+  };
 }
 
 function getQtyLineSubtotal(line: QuantityCartLine) {
-  const qty = parseFloat(line.quantity) || 0;
-  const price = parseFloat(line.unitPrice) || 0;
-  const discount = parseFloat(line.discountAmount) || 0;
-  return Math.max(0, qty * price - discount);
+  return quantityLineValues(line).subTotal.toNumber();
 }
 
 function getInvoiceTotals(
@@ -134,22 +132,34 @@ function getInvoiceTotals(
   payments: PaymentEntry[],
   taxEnabled: boolean,
   taxRatePercent: number,
+  meterToYard: string,
 ) {
-  const subtotal = lines.reduce((s, l) => {
-    if (l.lineType === 'ROLL') return s + getRollLineValues(l).grossSubTotal;
-    const qty = parseFloat(l.quantity) || 0;
-    const price = parseFloat(l.unitPrice) || 0;
-    return s + qty * price;
-  }, 0);
-  const discountTotal = lines.reduce((s, l) => {
-    return s + (parseFloat(l.discountAmount) || 0);
-  }, 0);
-  const taxableAmount = Math.max(0, subtotal - discountTotal);
-  const taxAmount = taxEnabled ? Math.round(taxableAmount * taxRatePercent) / 100 : 0;
-  const grandTotal = taxableAmount + taxAmount;
-  const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-  const due = Math.max(0, grandTotal - totalPaid);
-  return { subtotal, discountTotal, taxableAmount, taxAmount, grandTotal, totalPaid, due };
+  const t = invoiceTotals(lines, payments, { enabled: taxEnabled, ratePercent: taxRatePercent }, meterToYard);
+  return {
+    subtotal: t.subtotal.toNumber(),
+    discountTotal: t.discountTotal.toNumber(),
+    taxableAmount: t.taxableAmount.toNumber(),
+    taxAmount: t.taxAmount.toNumber(),
+    grandTotal: t.grandTotal.toNumber(),
+    totalPaid: t.totalPaid.toNumber(),
+    due: t.due.toNumber(),
+    change: t.change.toNumber(),
+  };
+}
+
+function cartIssuesFor(lines: CartLine[], meterToYard: string): string[] {
+  const issues: string[] = [];
+  for (const l of lines) {
+    if (l.lineType === 'ROLL') {
+      const v = rollLineValues(l, meterToYard);
+      if (v.exceedsRoll) issues.push(`Roll ${l.rollNumber}: cut is longer than the ${dec(l.remainingLengthYard).toFixed(2)} yd left`);
+      if (v.negativeSubtotal) issues.push(`Roll ${l.rollNumber}: discount is larger than the line amount`);
+    } else {
+      if (dec(l.quantity).gt(dec(l.quantityOnHand))) issues.push(`${l.productName}: only ${dec(l.quantityOnHand).toFixed(0)} in stock`);
+      if (quantityLineValues(l).negativeSubtotal) issues.push(`${l.productName}: discount is larger than the line amount`);
+    }
+  }
+  return issues;
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -157,6 +167,7 @@ function getInvoiceTotals(
 export default function RetailPOSPage() {
   const { showNotification } = useAppStore();
   const { code: baseCurrencyCode } = useBaseCurrency();
+  const meterToYard = useMeterToYardFactor();
   const barcodeRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -404,7 +415,7 @@ export default function RetailPOSPage() {
       }
       setBarcodeValue('');
     } catch (err: any) {
-      const code = err?.code ?? err?.response?.data?.error?.code;
+      const code = apiErrorCode(err);
       setScanError(code === 'BARCODE_NOT_FOUND' ? 'Barcode not found.' : 'Lookup failed.');
       setBarcodeValue('');
     } finally {
@@ -501,10 +512,7 @@ export default function RetailPOSPage() {
 
   function handleUnitChange(lineId: string, line: RollCartLine, newUnit: 'YARD' | 'METER') {
     if (newUnit === line.unit) return;
-    const price = parseFloat(line.unitPrice) || 0;
-    const newPrice =
-      newUnit === 'METER' ? (price * YD_TO_M).toFixed(2) : (price / YD_TO_M).toFixed(2);
-    updateLine(lineId, { unit: newUnit, unitPrice: newPrice });
+    updateLine(lineId, { unit: newUnit, unitPrice: convertUnitPrice(line.unitPrice, newUnit) });
   }
 
   function addPayment() {
@@ -520,7 +528,7 @@ export default function RetailPOSPage() {
   }
 
   function fillRemainingAsCash() {
-    const { due } = getInvoiceTotals(cartLines, payments, taxEnabled, taxRatePercent);
+    const { due } = getInvoiceTotals(cartLines, payments, taxEnabled, taxRatePercent, meterToYard);
     if (due <= 0) return;
     const cashIdx = payments.findIndex((p) => p.method === 'CASH');
     if (cashIdx >= 0) {
@@ -532,17 +540,22 @@ export default function RetailPOSPage() {
     }
   }
 
+  // Problems the server would reject; shown above the button so the cashier can
+  // fix them before submitting.
+  const cartIssues = cartIssuesFor(cartLines, meterToYard);
+
   const canSubmit =
     cartLines.length > 0 &&
     cartLines.every((l) => {
       if (l.lineType === 'ROLL') return parseFloat(l.billedQuantity) > 0 && parseFloat(l.unitPrice) >= 0;
       return parseFloat(l.quantity) > 0 && parseFloat(l.unitPrice) >= 0;
     }) &&
+    cartIssues.length === 0 &&
     !isSubmitting;
 
   async function handleCompleteSale() {
     if (!canSubmit) return;
-    if (!customerId && getInvoiceTotals(cartLines, payments, taxEnabled, taxRatePercent).due > 0.005) {
+    if (!customerId && getInvoiceTotals(cartLines, payments, taxEnabled, taxRatePercent, meterToYard).due > 0.005) {
       setSubmitErrors(['Select a customer to leave a balance due, or collect full payment.']);
       return;
     }
@@ -612,11 +625,12 @@ export default function RetailPOSPage() {
     }
   }
 
-  const { subtotal, discountTotal, taxableAmount, taxAmount, grandTotal, totalPaid, due } = getInvoiceTotals(
+  const { subtotal, discountTotal, taxableAmount, taxAmount, grandTotal, totalPaid, due, change } = getInvoiceTotals(
     cartLines,
     payments,
     taxEnabled,
     taxRatePercent,
+    meterToYard,
   );
 
   const creditBlocked = !creditSalesEnabled && due > 0;
@@ -651,6 +665,7 @@ export default function RetailPOSPage() {
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
+                  aria-label="Barcode"
                   placeholder="Scan or type barcode, press Enter…"
                   className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
                   disabled={scanLoading}
@@ -768,9 +783,9 @@ export default function RetailPOSPage() {
                   <tbody className="divide-y divide-gray-100">
                     {cartLines.map((line) => {
                       if (line.lineType === 'ROLL') {
-                        const v = getRollLineValues(line);
+                        const v = getRollLineValues(line, meterToYard);
                         const hasWastage = v.wastageYard > 0.001;
-                        const insufficientLength = v.remainingAfterCut < -0.001;
+                        const insufficientLength = v.exceedsRoll;
                         return (
                           <tr key={line.id} className={insufficientLength ? 'bg-red-50' : 'bg-blue-50/30'}>
                             <td className="px-4 py-3">
@@ -798,6 +813,7 @@ export default function RetailPOSPage() {
                               <input
                                 type="number" min="0" step="0.01"
                                 value={line.billedQuantity}
+                                aria-label={`Quantity for ${line.rollNumber}`}
                                 onChange={(e) => updateLine(line.id, { billedQuantity: e.target.value })}
                                 onClick={(e) => e.stopPropagation()}
                                 className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -805,7 +821,7 @@ export default function RetailPOSPage() {
                               />
                               {line.unit === 'METER' && parseFloat(line.billedQuantity) > 0 && (
                                 <p className="text-xs text-gray-400 font-mono mt-0.5 text-right">
-                                  ≈ {(parseFloat(line.billedQuantity) * M_TO_YD).toFixed(2)} yd
+                                  ≈ {v.billedYard.toFixed(2)} yd
                                 </p>
                               )}
                             </td>
@@ -813,6 +829,7 @@ export default function RetailPOSPage() {
                               <input
                                 type="number" min="0" step="0.01"
                                 value={line.actualCutQuantity}
+                                aria-label={`Actual cut for ${line.rollNumber}`}
                                 onChange={(e) => updateLine(line.id, { actualCutQuantity: e.target.value })}
                                 onClick={(e) => e.stopPropagation()}
                                 className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -825,6 +842,7 @@ export default function RetailPOSPage() {
                             <td className="px-3 py-3">
                               <select
                                 value={line.unit}
+                                aria-label={`Unit for ${line.rollNumber}`}
                                 onChange={(e) => handleUnitChange(line.id, line, e.target.value as 'YARD' | 'METER')}
                                 onClick={(e) => e.stopPropagation()}
                                 className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -837,6 +855,7 @@ export default function RetailPOSPage() {
                               <input
                                 type="number" min="0" step="0.01"
                                 value={line.unitPrice}
+                                aria-label={`Unit price for ${line.rollNumber}`}
                                 onChange={(e) => updateLine(line.id, { unitPrice: e.target.value })}
                                 onClick={(e) => e.stopPropagation()}
                                 className="w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -847,6 +866,7 @@ export default function RetailPOSPage() {
                               <input
                                 type="number" min="0" step="0.01"
                                 value={line.discountAmount}
+                                aria-label={`Discount for ${line.rollNumber}`}
                                 onChange={(e) => updateLine(line.id, { discountAmount: e.target.value })}
                                 onClick={(e) => e.stopPropagation()}
                                 className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -902,6 +922,7 @@ export default function RetailPOSPage() {
                               <input
                                 type="number" min="1" step="1"
                                 value={line.quantity}
+                                aria-label={`Quantity for ${line.productName}`}
                                 onChange={(e) => updateLine(line.id, { quantity: e.target.value })}
                                 onClick={(e) => e.stopPropagation()}
                                 className={`w-16 border rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500 ${overStock ? 'border-red-400' : 'border-gray-300'}`}
@@ -925,7 +946,8 @@ export default function RetailPOSPage() {
                             <input
                               type="number" min="0" step="0.01"
                               value={line.unitPrice}
-                              onChange={(e) => updateLine(line.id, { unitPrice: e.target.value })}
+                              aria-label={`Unit price for ${line.productName}`}
+                                onChange={(e) => updateLine(line.id, { unitPrice: e.target.value })}
                               onClick={(e) => e.stopPropagation()}
                               className="w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
                               placeholder="0.00"
@@ -935,7 +957,8 @@ export default function RetailPOSPage() {
                             <input
                               type="number" min="0" step="0.01"
                               value={line.discountAmount}
-                              onChange={(e) => updateLine(line.id, { discountAmount: e.target.value })}
+                              aria-label={`Discount for ${line.productName}`}
+                                onChange={(e) => updateLine(line.id, { discountAmount: e.target.value })}
                               onClick={(e) => e.stopPropagation()}
                               className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
                               placeholder="0.00"
@@ -1079,6 +1102,7 @@ export default function RetailPOSPage() {
               <div key={idx} className="flex gap-2">
                 <select
                   value={payment.method}
+                  aria-label={`Payment ${idx + 1} method`}
                   onChange={(e) => updatePayment(idx, { method: e.target.value })}
                   onClick={(e) => e.stopPropagation()}
                   className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -1090,6 +1114,7 @@ export default function RetailPOSPage() {
                 <input
                   type="number" min="0" step="0.01"
                   value={payment.amount}
+                  aria-label={`Payment ${idx + 1} amount`}
                   onChange={(e) => updatePayment(idx, { amount: e.target.value })}
                   onClick={(e) => e.stopPropagation()}
                   placeholder="0.00"
@@ -1135,7 +1160,7 @@ export default function RetailPOSPage() {
               </div>
               <div className={`flex justify-between text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 <span>{due > 0 ? 'Due' : 'Change'}</span>
-                <span className="font-mono">{formatAmount(Math.abs(totalPaid - grandTotal), baseCurrencyCode)}</span>
+                <span className="font-mono">{formatAmount(due > 0 ? due : change, baseCurrencyCode)}</span>
               </div>
               {due > 0 && (
                 <button
@@ -1169,6 +1194,14 @@ export default function RetailPOSPage() {
               <p className="text-sm text-amber-800">
                 Credit sales are disabled. Full payment is required to complete this sale.
               </p>
+            </div>
+          )}
+
+          {cartIssues.length > 0 && (
+            <div role="alert" className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-1">
+              {cartIssues.map((issue) => (
+                <p key={issue} className="text-sm text-red-700">{issue}</p>
+              ))}
             </div>
           )}
 

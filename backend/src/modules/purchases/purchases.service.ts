@@ -119,9 +119,17 @@ export class PurchasesService {
       // ── Currency / exchange rate resolution ──────────────────────────────
       const currencyCode = dto.currency ?? baseCurrencyCode;
       const isBaseCurrency = currencyCode === baseCurrencyCode;
+      // A foreign-currency purchase needs the rate the user agreed on; never
+      // assume 1:1, which would mis-value the stock and the supplier balance.
+      if (!isBaseCurrency && dto.exchangeRateToBaseCurrency == null) {
+        throw AppError.badRequest(
+          `Enter the ${currencyCode} → ${baseCurrencyCode} exchange rate for this purchase`,
+          'EXCHANGE_RATE_REQUIRED',
+        );
+      }
       const exchangeRate = isBaseCurrency
         ? new Prisma.Decimal(1)
-        : new Prisma.Decimal(dto.exchangeRateToBaseCurrency ?? 1);
+        : new Prisma.Decimal(dto.exchangeRateToBaseCurrency!);
 
       if (!isBaseCurrency && exchangeRate.lte(0)) {
         throw AppError.badRequest(
@@ -266,6 +274,12 @@ export class PurchasesService {
       const totalOriginal = subtotalOriginal;
       const totalBase = subtotalBase;
       const paidAmountOriginal = new Prisma.Decimal(dto.paidAmount ?? 0);
+      if (paidAmountOriginal.gt(totalOriginal)) {
+        throw AppError.badRequest(
+          `Paid amount ${paidAmountOriginal.toFixed(2)} is more than the purchase total ${totalOriginal.toFixed(2)}`,
+          'PAID_EXCEEDS_TOTAL',
+        );
+      }
       const payableOriginal = totalOriginal.minus(paidAmountOriginal);
 
       let status: InvoiceStatus;

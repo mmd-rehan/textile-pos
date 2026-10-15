@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Plus, Scissors, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiErrorMessage } from '../../api/errors';
 import { remnantsApi } from '../../api/remnants';
 import { rollsApi } from '../../api/rolls';
 import Badge from '../../components/ui/Badge';
@@ -175,7 +176,7 @@ function CreateRemnantModal({ onClose }: { onClose: () => void }) {
       onClose();
     },
     onError: (err: any) => {
-      showNotification(err?.response?.data?.message ?? 'Failed to create remnant', 'error');
+      showNotification(apiErrorMessage(err, 'Failed to create remnant'), 'error');
     },
   });
 
