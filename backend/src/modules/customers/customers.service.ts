@@ -2,7 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { createPaginatedResponse, createSuccessResponse } from '../../common/utils/response';
+import { lockRowsForUpdate } from '../../database/locking';
 import { PrismaService } from '../../database/prisma.service';
+import { allocateCustomerPayment } from './payment-allocation';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CreateCustomerPaymentDto } from './dto/create-customer-payment.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
@@ -156,8 +158,24 @@ export class CustomersService {
     if (dto.idempotencyKey) {
       const existing = await this.prisma.customerPayment.findUnique({
         where: { idempotencyKey: dto.idempotencyKey },
+        include: { allocations: { include: { invoice: { select: { invoiceNumber: true, dueAmount: true } } } } },
       });
-      if (existing) return existing;
+      if (existing) {
+        const { allocations, ...payment } = existing;
+        const applied = allocations.reduce((sum, a) => sum.plus(a.amount), new Prisma.Decimal(0));
+        return {
+          ...payment,
+          allocations: allocations.map((a) => ({
+            invoiceId: a.invoiceId,
+            invoiceNumber: a.invoice.invoiceNumber,
+            amount: a.amount.toString(),
+            // On a replay this is the invoice's current due, which may already
+            // include later payments.
+            dueAfter: a.invoice.dueAmount.toString(),
+          })),
+          unallocatedAmount: new Prisma.Decimal(payment.amount.toString()).minus(applied).toString(),
+        };
+      }
     }
 
     const amount = new Prisma.Decimal(dto.amount.toString()).toDecimalPlaces(2);
@@ -166,6 +184,9 @@ export class CustomersService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Lock the customer first: sales for this customer take the same lock, so
+      // invoices and the balance can't change while the payment is applied.
+      await lockRowsForUpdate(tx, 'customers', [id]);
       const customer = await tx.customer.findUnique({ where: { id }, select: { id: true } });
       if (!customer) throw AppError.notFound('Customer not found', 'CUSTOMER_NOT_FOUND');
 
@@ -188,6 +209,12 @@ export class CustomersService {
           notes: dto.notes ?? null,
           receivedById: userId,
         },
+      });
+
+      const { allocations, unallocated } = await allocateCustomerPayment(tx, {
+        customerId: id,
+        paymentId: payment.id,
+        amount,
       });
 
       await tx.customerLedgerEntry.create({
@@ -214,11 +241,13 @@ export class CustomersService {
             paymentMethod: dto.paymentMethod,
             balanceBefore: prevBalance.toString(),
             balanceAfter: newBalance.toString(),
+            allocations,
+            unallocated: unallocated.toString(),
           }),
         },
       });
 
-      return payment;
+      return { ...payment, allocations, unallocatedAmount: unallocated.toString() };
     });
   }
 

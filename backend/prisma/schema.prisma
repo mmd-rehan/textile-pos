@@ -746,11 +746,12 @@ model SaleInvoice {
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
-  customer         Customer?         @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  cashier          User              @relation("CashierInvoices", fields: [cashierId], references: [id], onDelete: Restrict)
-  saleInvoiceItems SaleInvoiceItem[]
-  salePayments     SalePayment[]
-  wastageEntries   WastageEntry[]
+  customer           Customer?                   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  cashier            User                        @relation("CashierInvoices", fields: [cashierId], references: [id], onDelete: Restrict)
+  saleInvoiceItems   SaleInvoiceItem[]
+  salePayments       SalePayment[]
+  paymentAllocations CustomerPaymentAllocation[]
+  wastageEntries     WastageEntry[]
 
   @@index([invoiceNumber])
   @@index([createdAt])
@@ -821,11 +822,30 @@ model CustomerPayment {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  receivedBy User     @relation("ReceivedByCustomerPayments", fields: [receivedById], references: [id], onDelete: Restrict)
+  customer    Customer                    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  receivedBy  User                        @relation("ReceivedByCustomerPayments", fields: [receivedById], references: [id], onDelete: Restrict)
+  allocations CustomerPaymentAllocation[]
 
   @@index([customerId])
   @@map("customer_payments")
+}
+
+// How much of a customer payment was applied to which invoice (oldest unpaid
+// invoice first). Append-only: together with the audit log this explains every
+// change to an invoice's paid/due amounts after the sale.
+model CustomerPaymentAllocation {
+  id        String   @id @default(uuid())
+  paymentId String   @map("payment_id")
+  invoiceId String   @map("invoice_id")
+  amount    Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  payment CustomerPayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice SaleInvoice     @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@map("customer_payment_allocations")
 }
 
 // ==========================================

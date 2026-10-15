@@ -14,7 +14,8 @@
     "db:seed:verify": "npx ts-node prisma/seeds/verify.ts",
     "test": "jest --runInBand",
     "test:unit": "jest --selectProjects unit",
-    "test:integration": "jest --selectProjects integration --runInBand"
+    "test:integration": "jest --selectProjects integration --runInBand",
+    "db:allocate-payments": "npx ts-node prisma/scripts/allocate-customer-payments.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.3",

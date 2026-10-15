@@ -592,6 +592,10 @@ export interface CustomerPayment {
   receivedById: string;
   createdAt: string;
   updatedAt: string;
+  /** Invoices this payment was applied to, oldest first. */
+  allocations?: { invoiceId: string; invoiceNumber: string; amount: string; dueAfter: string }[];
+  /** Part of the payment kept as customer credit. */
+  unallocatedAmount?: string;
 }
 
 export interface CustomerOutstanding {
