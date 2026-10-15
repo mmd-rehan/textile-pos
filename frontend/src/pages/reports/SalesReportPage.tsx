@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Download, BarChart2 } from 'lucide-react';
+import { AlertTriangle, BarChart2 } from 'lucide-react';
 import { useState } from 'react';
 import { reportsApi } from '../../api/reports';
+import ExportButton from '../../components/ui/ExportButton';
 import Pagination from '../../components/ui/Pagination';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
@@ -65,10 +66,9 @@ export default function SalesReportPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Retail and wholesale invoice analysis</p>
         </div>
-        <button className="flex items-center gap-2 text-sm border border-gray-300 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-50">
-          <Download className="w-4 h-4" />
-          Export (coming soon)
-        </button>
+        {view === 'invoices' && <ExportButton report="sales" params={{ startDate, endDate, saleType, status }} />}
+        {view === 'monthly' && <ExportButton report="sales-monthly" params={{ year, saleType }} />}
+        {view === 'products' && <ExportButton report="sales-products" params={{ startDate, endDate, saleType }} />}
       </div>
 
       {/* View toggle */}

@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Download, TrendingUp } from 'lucide-react';
+import { AlertTriangle, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 import { reportsApi } from '../../api/reports';
+import ExportButton from '../../components/ui/ExportButton';
 import { suppliersApi } from '../../api/suppliers';
 import Pagination from '../../components/ui/Pagination';
 import { formatAmount } from '../../constants/currencies';
@@ -58,10 +59,7 @@ export default function PurchasesReportPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Purchase orders — original currency and base currency totals</p>
         </div>
-        <button className="flex items-center gap-2 text-sm border border-gray-300 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-50">
-          <Download className="w-4 h-4" />
-          Export (coming soon)
-        </button>
+        <ExportButton report="purchases" params={{ startDate, endDate, supplierId, status }} />
       </div>
 
       {/* Filters */}

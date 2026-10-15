@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CreditCard, Download, Search } from 'lucide-react';
+import { AlertTriangle, CreditCard, Search } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { reportsApi } from '../../api/reports';
+import ExportButton from '../../components/ui/ExportButton';
 import Pagination from '../../components/ui/Pagination';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
@@ -38,10 +39,7 @@ export default function CustomersReportPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Customers with unpaid balances</p>
         </div>
-        <button className="flex items-center gap-2 text-sm border border-gray-300 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-50">
-          <Download className="w-4 h-4" />
-          Export (coming soon)
-        </button>
+        <ExportButton report="customers-outstanding" params={{ search }} />
       </div>
 
       {/* Summary + Search */}
