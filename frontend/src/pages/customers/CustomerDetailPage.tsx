@@ -9,7 +9,7 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { customersApi } from '../../api/customers';
@@ -19,7 +19,7 @@ import Pagination from '../../components/ui/Pagination';
 import { formatAmount } from '../../constants/currencies';
 import { useBaseCurrency } from '../../hooks/useBaseCurrency';
 import { useAppStore } from '../../store/useAppStore';
-import type { CustomerLedgerEntry } from '../../types';
+import type { CustomerLedgerEntry, CustomerPayment } from '../../types';
 
 const PAYMENT_METHODS = [
   { value: 'CASH', label: 'Cash' },
@@ -87,20 +87,33 @@ export default function CustomerDetailPage() {
     defaultValues: { amount: '', paymentMethod: 'CASH', notes: '' },
   });
 
+  // One key per payment attempt: reused on retries (e.g. after a timeout) so the
+  // server records the payment once, replaced only after a success.
+  const paymentKeyRef = useRef<string | null>(null);
+
   const paymentMutation = useMutation({
-    mutationFn: (values: PaymentForm) =>
-      customersApi.recordPayment(id!, {
+    mutationFn: (values: PaymentForm) => {
+      paymentKeyRef.current ??= crypto.randomUUID();
+      return customersApi.recordPayment(id!, {
         amount: parseFloat(values.amount),
         paymentMethod: values.paymentMethod,
         notes: values.notes || undefined,
-        idempotencyKey: `pay-${id}-${Date.now()}`,
-      }),
-    onSuccess: () => {
+        idempotencyKey: paymentKeyRef.current,
+      });
+    },
+    onSuccess: (res) => {
+      paymentKeyRef.current = null;
       qc.invalidateQueries({ queryKey: ['customer', id] });
       qc.invalidateQueries({ queryKey: ['customer-outstanding', id] });
       qc.invalidateQueries({ queryKey: ['customer-ledger', id] });
       qc.invalidateQueries({ queryKey: ['customers'] });
-      showNotification('Payment recorded successfully.', 'success');
+      // The payment changes paid/due on the invoices it was applied to.
+      qc.invalidateQueries({ queryKey: ['sales'] });
+      qc.invalidateQueries({ queryKey: ['sale'] });
+      qc.invalidateQueries({ queryKey: ['sale-receipt'] });
+      qc.invalidateQueries({ queryKey: ['report-customers-outstanding'] });
+      qc.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      showNotification(describeAllocation(res.data, baseCurrencyCode), 'success');
       setPaymentModalOpen(false);
       reset();
     },
@@ -421,4 +434,16 @@ export default function CustomerDetailPage() {
       </Modal>
     </div>
   );
+}
+
+function describeAllocation(payment: CustomerPayment, currencyCode: string): string {
+  const applied = payment.allocations ?? [];
+  const credit = parseFloat(payment.unallocatedAmount ?? '0');
+  const parts = applied.map((a) =>
+    `${a.invoiceNumber} ${formatAmount(a.amount, currencyCode)}${parseFloat(a.dueAfter) <= 0 ? ' (paid)' : ''}`,
+  );
+  let message = 'Payment recorded.';
+  if (parts.length) message += ` Applied to ${parts.join(', ')}.`;
+  if (credit > 0) message += ` ${formatAmount(credit, currencyCode)} kept as customer credit.`;
+  return message;
 }
