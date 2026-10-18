@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import path from 'path';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import configuration from './config/configuration';
 import { DatabaseModule } from './database/database.module';
@@ -30,6 +31,9 @@ import { ReportsModule } from './modules/reports/reports.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
+      // The whole project shares one .env at the repo root (src/ and dist/ both sit
+      // one level below backend/). Variables already set in the environment win.
+      envFilePath: path.resolve(__dirname, '..', '..', '.env'),
       load: [configuration],
       isGlobal: true,
     }),

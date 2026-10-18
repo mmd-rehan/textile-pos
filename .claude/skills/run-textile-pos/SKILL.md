@@ -3,7 +3,7 @@ name: run-textile-pos
 description: Build, run, and drive TextilePOS. Use when asked to start the app, run it, take a screenshot, test a UI flow, interact with the running frontend or backend, or verify a change works in the browser.
 ---
 
-TextilePOS is a Vite+React frontend (`:5173`) proxied to a NestJS backend (`:5001`) backed by MySQL (`:3307`). Drive it via `.claude/skills/run-textile-pos/driver.mjs` — a Playwright Chromium REPL that pipes commands to a headless browser. The backend REST API is also reachable directly with `curl`.
+TextilePOS is a Vite+React frontend (`:5173`) proxied to a NestJS backend (`:5001`) backed by MySQL 9.7 (port = `MYSQL_PORT` in the root `.env`). Drive it via `.claude/skills/run-textile-pos/driver.mjs` — a Playwright Chromium REPL that pipes commands to a headless browser. The backend REST API is also reachable directly with `curl`.
 
 All paths below are relative to the repo root (`/Users/muhammadrehan/Public/textile-pos/`).
 
@@ -19,22 +19,20 @@ All paths below are relative to the repo root (`/Users/muhammadrehan/Public/text
 # 1. Install root + workspace deps
 npm install
 
-# 2. Start MySQL
-docker compose -f docker/docker-compose.yml up -d
+# 2. One env file for the whole project (skip if .env exists)
+cp .env.example .env
 
-# 3. Run DB migrations (first time / after schema changes)
-cd backend && npx prisma migrate dev && cd ..
+# 3. Start MySQL (Docker) — or point DATABASE_URL in .env at your own MySQL
+npm run db:up
 
-# 4. Seed the database (first time)
-cd backend && npm run prisma:migrate && npx ts-node prisma/seed.ts && cd ..
+# 4. Migrations + standard seed (first time / after pulling new migrations)
+npm run db:setup
 
 # 5. Install Playwright Chromium for the driver (one-time)
 cd .claude/skills/run-textile-pos && npm install && npx playwright install chromium && cd ../../..
 ```
 
-Backend env (already committed at `backend/.env`):
-- `PORT=5001`
-- `DATABASE_URL="mysql://root:password@localhost:3306/textile_pos"` — note: Docker maps `3307→3306` inside the container; the backend connects via the internal port `3306` if running inside Docker, or the mapped `3307` if connecting from the host. The seeded `.env` uses `3306` (direct Docker network). This works as long as Docker is up.
+Configuration lives in the single root `.env` (no `backend/.env` or `frontend/.env`). `DATABASE_URL` must use the host port from `MYSQL_PORT`; `BACKEND_PORT` / `FRONTEND_PORT` set the dev ports. Admin login = `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` from `.env`.
 
 ## Run (agent path)
 
@@ -108,7 +106,7 @@ curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:5001/api/v1/inventor
 ## Run (human path)
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+npm run db:up
 npm run dev   # → frontend :5173, backend :5001. Ctrl-C to stop.
 # Open http://localhost:5173 — login: admin / Admin@123
 ```
@@ -139,7 +137,7 @@ npm run dev   # → frontend :5173, backend :5001. Ctrl-C to stop.
 ## Gotchas
 
 - **`login` log shows `/login` URL** — the driver captures the URL immediately after `keyboard.press('Enter')`, before the React Router redirect completes. The screenshot will be on the correct page; the logged URL is a race artifact.
-- **`DATABASE_URL` port mismatch** — `backend/.env` has `localhost:3306` but Docker maps `3307:3306`. This works because the backend connects to the Docker container's internal port through Docker networking. If you run MySQL outside Docker, change the port to match.
+- **`DATABASE_URL` port mismatch** — the port in `DATABASE_URL` must equal `MYSQL_PORT` in the root `.env` when using the Docker MySQL.
 - **Vite proxy** — the frontend sends all `/api/*` requests to `:5001` via the Vite dev proxy. Don't hit `:5173/api` with `curl` — use `:5001` directly.
 - **React controlled inputs** — `eval el.value = '...'` does not fire React's `onChange`. Always use `fill` in the driver, not `eval`.
 - **First nav after login is slow** — Vite compiles routes on demand; the first `nav` to a heavy page can take 5–8 s. `wait h1` handles it; a raw `sleep` does not.
@@ -149,7 +147,7 @@ npm run dev   # → frontend :5173, backend :5001. Ctrl-C to stop.
 ## Troubleshooting
 
 - **`ECONNREFUSED :5173`**: frontend isn't up yet. Poll with `until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done`.
-- **`Invalid credentials` from API**: run `cd backend && npx ts-node prisma/seed.ts` to re-seed the admin user.
-- **`Can't connect to MySQL server`**: `docker compose -f docker/docker-compose.yml up -d` and wait ~5 s for it to initialize.
+- **`Invalid credentials` from API**: run `npm run db:seed` to re-seed the admin user.
+- **`Can't connect to MySQL server`**: `npm run db:up` and wait ~10 s for it to initialize.
 - **Playwright `browserType.launch: Failed to launch`**: run `npx playwright install chromium` from inside `.claude/skills/run-textile-pos/`.
 - **Driver exits immediately with only `READY QUIT`**: commands are being lost to a readline race. Fixed in driver v2 (sequential queue). Make sure you're on the current `driver.mjs`.

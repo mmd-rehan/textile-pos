@@ -1,15 +1,10 @@
-# Full-stack deployment for TextilePOS: MySQL + backend API + Nginx-served frontend.
+# TextilePOS Docker services. Everything is configured from the single root .env.
 #
-# Quick start:
-#   cp .env.example .env      # then edit secrets and (optionally) ports
-#   docker compose up --build
+#   npm run db:up               # only MySQL, for local development with `npm run dev`
+#   docker compose up --build   # full stack: MySQL + backend API + Nginx-served frontend
 #
 #   Frontend → http://localhost:${FRONTEND_PORT:-5173}
 #   Backend  → http://localhost:${BACKEND_PORT:-5001}/api/v1   (health: /health)
-#
-# This file is SEPARATE from docker/docker-compose.yml, which only runs MySQL for
-# the local `npm run setup` / `npm run dev` development workflow. Use this root
-# file for the containerised full-stack deployment.
 
 services:
   mysql:
@@ -21,10 +16,10 @@ services:
       MYSQL_USER: ${MYSQL_USER:-textile_pos}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
-    # Optional host port mapping (handy for DB tools). Internally MySQL is always
-    # on 3306; the backend reaches it via the service name `mysql`.
+    # Host port for `npm run dev` and DB tools. Inside Docker MySQL is always on 3306;
+    # the backend container reaches it via the service name `mysql`.
     ports:
-      - "${MYSQL_PORT:-3307}:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -46,14 +41,13 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5001
-      # Backend talks to database. Uses DATABASE_URL from .env if defined, otherwise defaults to local container.
-      DATABASE_URL: ${DATABASE_URL:-mysql://${MYSQL_USER:-textile_pos}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-textile_pos}}
+      # DATABASE_URL in .env points at localhost for `npm run dev`, which is not
+      # reachable from inside a container. The containerised backend uses the
+      # `mysql` service unless DOCKER_DATABASE_URL names another server.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-mysql://${MYSQL_USER:-textile_pos}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-textile_pos}}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
-      SESSION_SECRET: ${SESSION_SECRET:-}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       STORAGE_PATH: /app/storage
-      BASE_CURRENCY_CODE: ${SEED_BASE_CURRENCY:-USD}
       # Seeder inputs (standard seed only; demo data stays off unless SEED_DEV_DATA=true).
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Administrator}
       SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-admin}

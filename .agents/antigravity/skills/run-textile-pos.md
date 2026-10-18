@@ -6,14 +6,14 @@ description: >
 
 # Run TextilePOS (Antigravity Edition)
 
-TextilePOS is a Vite+React frontend (`:5173`) proxied to a NestJS backend (`:5001`) backed by MySQL (`:3307`).
+TextilePOS is a Vite+React frontend (`:5173`) proxied to a NestJS backend (`:5001`) backed by MySQL 9.7. All configuration is in the single root `.env` (copy `.env.example`).
 
 ## Managing Background Tasks
 Unlike standard chatbots, you can run and manage these servers autonomously in the background.
 
 1. **Start MySQL**:
    ```bash
-   run_command: docker compose -f docker/docker-compose.yml up -d
+   run_command: npm run db:up && npm run db:setup
    ```
 2. **Start Backend**:
    Use `WaitMsBeforeAsync: 3000` to let it start, then move to background.
