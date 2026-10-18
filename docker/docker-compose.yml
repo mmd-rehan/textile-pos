@@ -1,6 +1,6 @@
 services:
   db:
-    image: mariadb:10.11
+    image: mysql:9.7
     container_name: textile_pos_db
     restart: unless-stopped
     environment:
@@ -15,7 +15,7 @@ services:
     healthcheck:
       test:
         - CMD
-        - mariadb-admin
+        - mysqladmin
         - ping
         - -h
         - localhost

@@ -30,15 +30,15 @@ export async function lockRowsForUpdate(tx: Tx, table: LockableTable, ids: Array
  */
 export async function nextSequenceValue(tx: Tx, key: string, initialValue: () => Promise<number>): Promise<number> {
   const updated = await tx.$executeRaw`
-    UPDATE document_sequences SET last_value = last_value + 1, updated_at = NOW(3) WHERE \`key\` = ${key}`;
+    UPDATE document_sequences SET \`last_value\` = \`last_value\` + 1, updated_at = NOW(3) WHERE \`key\` = ${key}`;
   if (updated === 0) {
     const start = (await initialValue()) + 1;
     await tx.$executeRaw`
-      INSERT INTO document_sequences (\`key\`, last_value, updated_at) VALUES (${key}, ${start}, NOW(3))
-      ON DUPLICATE KEY UPDATE last_value = last_value + 1, updated_at = NOW(3)`;
+      INSERT INTO document_sequences (\`key\`, \`last_value\`, updated_at) VALUES (${key}, ${start}, NOW(3))
+      ON DUPLICATE KEY UPDATE \`last_value\` = \`last_value\` + 1, updated_at = NOW(3)`;
   }
   const rows = await tx.$queryRaw<{ last_value: number | bigint }[]>`
-    SELECT last_value FROM document_sequences WHERE \`key\` = ${key}`;
+    SELECT \`last_value\` FROM document_sequences WHERE \`key\` = ${key}`;
   return Number(rows[0].last_value);
 }
 

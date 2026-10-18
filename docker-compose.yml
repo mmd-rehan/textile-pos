@@ -13,7 +13,7 @@
 
 services:
   mysql:
-    image: mariadb:10.11
+    image: mysql:9.7
     container_name: textile_pos_mysql
     restart: unless-stopped
     environment:
@@ -21,14 +21,14 @@ services:
       MYSQL_USER: ${MYSQL_USER:-textile_pos}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
-    # Optional host port mapping (handy for DB tools). Internally MariaDB is always
+    # Optional host port mapping (handy for DB tools). Internally MySQL is always
     # on 3306; the backend reaches it via the service name `mysql`.
     ports:
       - "${MYSQL_PORT:-3307}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 5s
       timeout: 5s
       retries: 30

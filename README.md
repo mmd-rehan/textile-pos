@@ -137,7 +137,7 @@ erDiagram
 
 - **Frontend**: [React 18](https://react.dev/) + [Vite](https://vitejs.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Tailwind CSS](https://tailwindcss.com/)
 - **Backend**: [Node.js](https://nodejs.org/) + [NestJS](https://nestjs.com/) + [TypeScript](https://www.typescriptlang.org/)
-- **Database**: [MySQL 8.0](https://www.mysql.com/)
+- **Database**: [MySQL 9.7 LTS](https://www.mysql.com/)
 - **ORM**: [Prisma](https://www.prisma.io/)
 - **State Management**: [Zustand](https://github.com/pmndrs/zustand) (Client UI state) & [TanStack Query](https://tanstack.com/query/latest) (Server state)
 
@@ -261,7 +261,7 @@ npm run test:integration                             # migrates + seeds the _tes
 npm test                                             # both
 ```
 
-Create the empty database once, e.g. `CREATE DATABASE textile_pos_test;` in the dev MariaDB container.
+Create the empty database once, e.g. `CREATE DATABASE textile_pos_test;` in the dev MySQL container.
 
 ### Running the frontend tests
 
