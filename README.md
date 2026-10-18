@@ -261,7 +261,7 @@ npm run test:integration                             # migrates + seeds the _tes
 npm test                                             # both
 ```
 
-Create the empty database once, e.g. `CREATE DATABASE textile_pos_test;` in the dev MariaDB container.
+Create the empty database once, e.g. `CREATE DATABASE textile_pos_test;` in the dev MySQL container.
 
 ### Running the frontend tests
 
