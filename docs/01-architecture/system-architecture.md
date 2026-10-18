@@ -75,7 +75,7 @@ The first implementation is a single-shop, web-based system. It should be simple
 
 ### Database
 
-- MySQL 8 or compatible SQL database.
+- MySQL 9.7 (LTS).
 - Prisma, TypeORM, or Drizzle ORM.
 - Transaction-first inventory updates.
 - Decimal columns for measurements and money.

@@ -10,7 +10,7 @@ The database must accurately represent textile business reality: products are im
 
 ## Database Choice
 
-Use MySQL 8 or a compatible SQL database for v1.
+Use MySQL 9.7 (LTS) for v1.
 
 Reasons:
 

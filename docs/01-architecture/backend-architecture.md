@@ -39,7 +39,7 @@ Why:
 - Node.js.
 - NestJS.
 - TypeScript.
-- MySQL 8.
+- MySQL 9.7 (LTS).
 - Prisma, TypeORM, or Drizzle ORM.
 - Zod, class-validator, or Nest pipes for validation.
 - bcrypt or argon2 for password hashing.
