@@ -9,7 +9,7 @@ async function bootstrap() {
 
   configureApp(app);
 
-  const port = process.env.PORT || 5000;
+  const port = process.env.PORT || process.env.BACKEND_PORT || 5001;
   await app.listen(port);
   logger.log(`TextilePOS Backend initialized and running on port ${port}`);
 }

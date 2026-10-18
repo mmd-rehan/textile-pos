@@ -160,3 +160,8 @@ sketch
 
 # Private uploaded files (supplier invoices etc.) — never commit
 backend/storage/
+
+# Local IDE and deployment-tool config
+.idea/
+.vercel/
+.DS_Store

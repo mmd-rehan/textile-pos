@@ -146,63 +146,124 @@ erDiagram
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18 or higher) and `npm`
-- [Docker Desktop](https://www.docker.com/) (includes Docker Compose v2)
-- A `bash`-compatible shell (macOS / Linux / WSL)
 
-### One-command setup
+- [Node.js](https://nodejs.org/) 20 or newer, with `npm`
+- A **MySQL 9.7** database. Any one of these works:
+  - **Docker** — the repo ships a MySQL container (`npm run db:up`), or
+  - **MySQL installed on your PC** (`localhost:3306`), or
+  - **A hosted MySQL server**, e.g. **SkySQL**.
+
+### How configuration works
+
+The whole project uses **one `.env` file in the repo root**. The backend (NestJS + Prisma), the frontend dev server (Vite) and `docker-compose.yml` all read it. There are no `backend/.env` or `frontend/.env` files.
+
+```bash
+cp .env.example .env
+```
+
+The one value that must be right is `DATABASE_URL`:
+
+```
+mysql://USER:PASSWORD@HOST:PORT/DATABASE
+```
+
+If your password contains special characters, URL-encode them (`@` → `%40`, `#` → `%23`, `/` → `%2F`).
+
+### 1. Install
 
 ```bash
 git clone https://github.com/mmd-rehan/textile-pos.git
 cd textile-pos
-npm run setup
+npm install
+cp .env.example .env
 ```
 
-`npm run setup` runs `scripts/setup.sh`, which:
-1. Checks prerequisites (`node`, `npm`, `docker`, `docker compose`).
-2. Asks for any missing configuration (ports, db user, admin user, base currency, …).
-3. Auto-picks the next free port if 3306 / 5001 / 5173 are already in use.
-4. Generates random secrets for the DB password, MySQL root password, JWT, session, and (if you don't supply one) the admin password.
-5. Writes `backend/.env`, `frontend/.env`, and `docker/.env` — preserving any unrelated keys you've already added.
-6. Starts MySQL via `docker compose` and waits for the container to report healthy.
-7. Installs npm workspaces, generates the Prisma client, runs `prisma migrate deploy`, and runs `prisma db seed`.
+Open `.env` and set `JWT_SECRET` and `SEED_ADMIN_PASSWORD` (the admin login), then pick **one** database option below.
 
-When it finishes, it prints the resolved service URLs and (if it generated an admin password) prints that password **once** — save it.
+### 2. Point the app at a database
 
-### Non-interactive setup with flags
+#### Option A — MySQL in Docker (easiest)
 
-Every interactive prompt has a matching flag, so the script can run fully unattended:
+Leave the `MYSQL_*` values in `.env` as they are (or change the passwords), and make `DATABASE_URL` use the same user, password and port:
+
+```dotenv
+MYSQL_USER=textile_pos
+MYSQL_PASSWORD=change_me
+MYSQL_PORT=3306
+DATABASE_URL="mysql://textile_pos:change_me@localhost:3306/textile_pos"
+```
 
 ```bash
-npm run setup -- \
-  --mysql-port 3307 \
-  --backend-port 5002 \
-  --frontend-port 5174 \
-  --db-name textile_pos \
-  --db-user textile_user \
-  --base-currency USD \
-  --company-name "Textile & POS ERP" \
-  --admin-username admin \
-  --admin-email admin@example.com \
-  --admin-password "Strong#Pass1" \
-  --yes
+npm run db:up        # starts MySQL 9.7 and creates the textile_pos database
 ```
 
-`--yes` accepts safe defaults and generates secrets for anything still missing. Other useful flags:
+If port 3306 is already taken on your machine, set `MYSQL_PORT=3307` and use `:3307` in `DATABASE_URL`.
 
-| Flag | Effect |
+#### Option B — MySQL already installed on your PC
+
+Create the database once:
+
+```bash
+mysql -u root -p -e "CREATE DATABASE textile_pos CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+```
+
+Then put its connection string in `.env`:
+
+```dotenv
+DATABASE_URL="mysql://root:your_password@localhost:3306/textile_pos"
+```
+
+#### Option C — Hosted database (e.g. SkySQL)
+
+1. In the SkySQL console (or your provider's), create a database named `textile_pos`:
+   ```sql
+   CREATE DATABASE textile_pos CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
+2. Copy the host, port, user and password from the provider's **Connect** page into `.env`. Hosted servers require TLS, so add `?sslaccept=strict`:
+   ```dotenv
+   DATABASE_URL="mysql://your_user:your_password@your-host.skysql.com:4000/textile_pos?sslaccept=strict"
+   ```
+
+### 3. Create the tables and the admin user (first run only)
+
+```bash
+npm run db:setup
+```
+
+This runs `prisma migrate deploy` (creates or updates every table) followed by the standard seed (roles, permissions, currencies, units, settings, and the admin user from `SEED_ADMIN_*`). It is safe to run again: migrations that already ran are skipped, and the seed never duplicates data.
+
+Run it again **after every `git pull` that adds new migrations** (files under `backend/prisma/migrations/`). `npm run db:status` shows whether any are pending.
+
+Want sample products, suppliers and sales to click around with? Also run `npm run db:seed:dev`.
+
+### 4. Start the app
+
+```bash
+npm run dev
+```
+
+- **Frontend** → `http://localhost:5173` (`FRONTEND_PORT`). It proxies `/api` to the backend.
+- **Backend API** → `http://localhost:5001/api/v1` (`BACKEND_PORT`), health check at `/api/v1/health`.
+
+Log in with `SEED_ADMIN_USERNAME` (default `admin`) and `SEED_ADMIN_PASSWORD` from your `.env`.
+
+### Everyday commands
+
+| Command | What it does |
 | :--- | :--- |
-| `--skip-install` | Skip `npm install`. |
-| `--skip-docker`  | Don't start the MySQL container (use your own). |
-| `--skip-migrate` | Don't apply Prisma migrations. |
-| `--skip-seed`    | Don't run the seeder. |
-| `--reset-admin-password` | Force-update an existing admin's password to `--admin-password`. |
-| `--allow-root-db-user` | Permit `root` as the application DB user (not recommended — see below). |
-| `--debug` | Verbose tracing (`set -x`). Never prints passwords or secrets. |
+| `npm run dev` | Start backend and frontend with hot reload. |
+| `npm run db:up` / `npm run db:down` | Start / stop the Docker MySQL container (Option A). Data is kept. |
+| `npm run db:setup` | Apply pending migrations, then run the standard seed. |
+| `npm run db:status` | Show which migrations have run and which are pending. |
+| `npm run db:deploy` | Apply pending migrations only. |
+| `npm run db:seed` | Run the standard seed only. |
+| `npm run db:seed:dev` | Add demo data (products, suppliers, sales…). |
+| `npm run db:migrate` | **Developers changing the schema:** create a new migration from `schema.prisma` and apply it locally. Needs a user that can create databases (Prisma's shadow database), e.g. `root`. |
+| `npm run db:generate` | Regenerate the Prisma client (`npm run dev` already does this). |
 
-Run `npm run setup -- --help` for the full list.
+> ⚠️  **Never** run `prisma db push` against a shared, staging, or production database. It changes the schema without a migration and can drop tables or columns. The flow is always: `npm run db:migrate` locally → commit the migration → `npm run db:setup` (or `db:deploy`) everywhere else.
 
-> ℹ️  **Don't use `root` as the application DB user.** Use `textile_pos` (the default). If you pass `--db-user root`, setup warns and switches to `textile_pos` automatically — interactively it asks first. `--allow-root-db-user` overrides this; in that case the app connects as the real MySQL `root` account (the `mysql` image refuses to create a separate `root` user).
+To reset the admin password, set a new `SEED_ADMIN_PASSWORD` and `SEED_RESET_ADMIN_PASSWORD=true` in `.env`, run `npm run db:seed`, then set it back to `false`.
 
 ### What gets seeded
 
@@ -215,62 +276,26 @@ The seeder (`backend/prisma/seed.ts`) is **production-safe** and idempotent. It 
 - **Company settings** — name, phone, email, address, base currency, timezone.
 - **App settings** — invoice / PO / payment / barcode prefixes (`INV`, `WINV`, `PO`, `SPAY`, `CPAY`, `SRET`, `PRET`, `ROLL`, `TPOS`), tax defaults (`enabled=false`, `rate=0`, `label=VAT`), barcode format (`CODE128`), measurement defaults (base unit `YARD`, remnant threshold `2`, decimal precision `4`), and the allowed payment methods (`CASH`, `CARD`, `BANK_TRANSFER`, `CHEQUE`, `CREDIT`).
 - **Feature flags** — `wholesalePos`, `barcodeGeneration`, `wastageTracking`, `remnantManagement`, `creditSales` (defaults applied only on first install — re-runs never overwrite an admin's choice).
-- **Admin user** — created **only if no user with the Admin role exists**. Username, email, and password come from `SEED_ADMIN_*` env vars (written by `setup.sh`). To rotate the password later: re-run setup with `--reset-admin-password --admin-password "<new pw>"`.
+- **Admin user** — created **only if no user with the Admin role exists**, from the `SEED_ADMIN_*` values in `.env`.
 
-### Environment files
+### Running the tests
 
-`setup.sh` writes three files (all gitignored):
-
-- `backend/.env` — `PORT`, `DATABASE_URL`, `JWT_SECRET`, `SESSION_SECRET`, `CORS_ORIGIN`, `STORAGE_PATH`, `BASE_CURRENCY_CODE`, `SEED_*`.
-- `frontend/.env` — `VITE_API_URL`, `VITE_API_BASE_URL`, `VITE_BACKEND_PORT` (drives the Vite proxy).
-- `docker/.env` — `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `MYSQL_PORT` (consumed by `docker/docker-compose.yml`).
-
-Examples are checked in as `*.env.example`.
-
-### Start the app
+**Backend.** Unit tests need nothing else. Integration tests boot the real API against a disposable database and **wipe it on every run**, so they only run when `TEST_DATABASE_URL` points to a database whose name ends in `_test` (they never touch `DATABASE_URL`).
 
 ```bash
-npm run dev
+# once: create the empty test database
+mysql -u root -p -h 127.0.0.1 -P 3306 -e "CREATE DATABASE textile_pos_test;"
+# (Docker MySQL: docker exec -it textile_pos_mysql mysql -uroot -p -e "CREATE DATABASE textile_pos_test;")
+
+export TEST_DATABASE_URL="mysql://root:<root password>@127.0.0.1:3306/textile_pos_test"
+npm test --workspace=backend                       # unit + integration
+npm run test:unit --workspace=backend              # unit only, no database needed
 ```
 
-- **Frontend**: `http://localhost:<frontend-port>` (default 5173) — proxies `/api` to the backend.
-- **Backend API**: `http://localhost:<backend-port>/api/v1` (default 5001).
-
-Log in with the admin user created during setup.
-
-### Useful database commands
+**Frontend.** Vitest + Testing Library in jsdom; the API is mocked, so no backend or database is needed.
 
 ```bash
-npm run db:generate      # Regenerate the Prisma client after schema edits
-npm run db:migrate       # prisma migrate dev — for local schema iteration
-npm run db:deploy        # prisma migrate deploy — for shared / staging / prod DBs
-npm run db:seed          # prisma db seed — re-run the standard seeder
-```
-
-> ⚠️  **Never** run `prisma db push` against a shared, staging, or production database. It rewrites the schema without producing a migration and will silently drop tables / columns. `db push` is only acceptable for throw-away local experiments. The standard flow is always `migrate dev` (locally) → commit the migration → `migrate deploy` (everywhere else).
-
-### Running the backend tests
-
-Unit tests need nothing else. Integration tests boot the real API against a disposable database and **wipe it on every run**, so they only run when `TEST_DATABASE_URL` points to a database whose name ends in `_test` (they never read `DATABASE_URL` or `.env`).
-
-```bash
-cd backend
-npm run test:unit                                    # no database needed
-export TEST_DATABASE_URL="mysql://root:<password>@127.0.0.1:3307/textile_pos_test"
-npm run test:integration                             # migrates + seeds the _test database, then runs
-npm test                                             # both
-```
-
-Create the empty database once, e.g. `CREATE DATABASE textile_pos_test;` in the dev MySQL container.
-
-### Running the frontend tests
-
-Vitest + Testing Library in jsdom; the API is mocked, so no backend or database is needed.
-
-```bash
-cd frontend
-npm test            # run once
-npm run test:watch  # re-run on change
+npm test --workspace=frontend
 ```
 
 CI runs both suites on every pull request (`.github/workflows/tests.yml`).
@@ -279,30 +304,20 @@ CI runs both suites on every pull request (`.github/workflows/tests.yml`).
 
 | Symptom | Fix |
 | :--- | :--- |
-| `Docker daemon reachable` check fails | Start Docker Desktop and re-run. |
-| `Port 3306 (or 5001 / 5173) is busy. Using N instead.` | This is fine — setup auto-picks the next free port and writes it to `docker/.env` (`MYSQL_PORT`) and `backend/.env` (`DATABASE_URL`). To reuse 3306, stop the conflicting container first (e.g. `docker stop mysql`). To force a specific port, pass `--mysql-port`, `--backend-port` or `--frontend-port` (e.g. `npm run setup -- --mysql-port 3307`). |
-| Another MySQL container already owns port 3306 | Safe — setup never stops, removes, or overwrites existing containers. It starts its own `textile_pos_db` on the next free host port. Either `docker stop mysql` to free 3306, or let setup pick 3307. |
-| `MySQL did not become ready in time.` | `docker compose -f docker/docker-compose.yml logs db` for details. Most often: stale `mysql_data` volume from a previous setup — `docker compose -f docker/docker-compose.yml down -v` then re-run setup. |
-| `Using 'root' as the application DB user is not recommended.` | Use `textile_pos`. Setup auto-switches under `--yes`; pass `--allow-root-db-user` only if you really need the app to connect as root. |
-| `prisma migrate deploy` fails | `cd backend && npx prisma migrate status` shows the offending migration. Verify `DATABASE_URL` in `backend/.env` matches `docker/.env`. |
-| `Admin user already exists.` after seed | Expected when re-running setup. Pass `--reset-admin-password --admin-password "<new pw>"` to rotate. |
-| `Permission denied` running `scripts/setup.sh` | `chmod +x scripts/setup.sh` (or just call `bash scripts/setup.sh`). |
-
-#### Default account
-
-A single Admin user is created on first install:
-
-| Username | Password | Role |
-| :--- | :--- | :--- |
-| `admin` (or `--admin-username`) | shown once at the end of setup (or whatever you passed via `--admin-password`) | **Admin** — full system access |
+| `Can't reach database server` / `P1001` | The database isn't running or `DATABASE_URL` has the wrong host/port. Option A: `npm run db:up` and check `MYSQL_PORT` matches the port in `DATABASE_URL`. |
+| `Authentication failed` / `P1000` | Wrong user or password in `DATABASE_URL`. URL-encode special characters in the password. |
+| `Database ... does not exist` / `P1003` | Create it first (`CREATE DATABASE textile_pos;`) — see Options B and C. |
+| `port is already allocated` on `npm run db:up` | Another MySQL already uses that port. Set `MYSQL_PORT=3307` (and `:3307` in `DATABASE_URL`). |
+| Hosted DB: `TLS connection required` / handshake errors | Add `?sslaccept=strict` to the end of `DATABASE_URL`. |
+| `Port 5001 / 5173 is in use` | Change `BACKEND_PORT` / `FRONTEND_PORT` in `.env`. |
+| Login fails right after install | Run `npm run db:setup` — the admin user is created by the seed. |
+| API errors about missing tables or columns after `git pull` | New migrations arrived: `npm run db:setup`. |
 
 ---
 
 ## 🐳 Docker Deployment (full stack)
 
-The `npm run setup` flow above is for **local development** (it runs MySQL in Docker but the backend/frontend on your host). To run the **entire stack in containers** — MySQL, the backend API, and the Nginx-served frontend — use the root `docker-compose.yml`.
-
-> The root `docker-compose.yml` is independent of `docker/docker-compose.yml` (which only powers the dev MySQL for `npm run setup`). They use different volumes, so they don't conflict, but you normally run **one or the other**, not both.
+To run the **entire stack in containers** — MySQL, the backend API, and the Nginx-served frontend — use `docker compose`. It reads the same root `.env`.
 
 ### 1. Local Docker deployment
 
@@ -313,8 +328,8 @@ docker compose up --build
 
 This single command:
 
-1. Starts **MySQL** (`mysql:8.0`) with a persistent `mysql_data` volume and a healthcheck.
-2. Builds and starts the **backend**, which waits for MySQL, runs `prisma migrate deploy`, runs the **standard seed** (`prisma db seed`), then starts the API.
+1. Starts **MySQL 9.7** with a persistent `mysql_data` volume and a healthcheck.
+2. Builds and starts the **backend**, which waits for MySQL, runs `prisma migrate deploy`, runs the **standard seed**, then starts the API. Migrations and seed run automatically on every start — no manual step.
 3. Builds and starts the **frontend** (Nginx serving the built React SPA).
 
 When it's up:
@@ -323,16 +338,18 @@ When it's up:
 - **Backend API** → `http://localhost:5001/api/v1` (or your `BACKEND_PORT`)
 - **Health check** → `http://localhost:5001/api/v1/health`
 
-Log in with the seeded admin credentials from your `.env` (`SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD`).
+Log in with `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` from your `.env`.
 
-> The frontend's API URL is baked in at **build time** from `VITE_API_BASE_URL` (default `http://localhost:5001/api/v1`). It must be a URL the **browser** can reach — never the Docker service name `backend`, which the browser can't resolve. If you change `BACKEND_PORT` or deploy to a domain, set `VITE_API_BASE_URL` accordingly and rebuild (`docker compose up --build`).
+Inside Docker the backend talks to the `mysql` service, not to `DATABASE_URL` (which points at `localhost` for `npm run dev`). To run the containers against a hosted database such as SkySQL instead, set `DOCKER_DATABASE_URL` in `.env`.
+
+> The frontend's API URL is baked in at **build time** from `VITE_API_BASE_URL` (default `http://localhost:5001/api/v1`). It must be a URL the **browser** can reach — never the Docker service name `backend`. If you change `BACKEND_PORT` or deploy to a domain, set `VITE_API_BASE_URL` accordingly and rebuild (`docker compose up --build`).
 
 ### 2. Important before production
 
-- **Change every secret** in `.env` (`MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `JWT_SECRET`, `SESSION_SECRET`).
+- **Change every secret** in `.env` (`MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `JWT_SECRET`).
 - Use a **strong admin password** (`SEED_ADMIN_PASSWORD`).
-- **Do not expose MySQL publicly** unless you need to — remove the `mysql` `ports:` mapping, bind it to `127.0.0.1`, or block it at the firewall.
-- Put the app behind an **HTTPS reverse proxy** (Nginx / Caddy / Traefik) and point `CORS_ORIGIN` + `VITE_API_BASE_URL` at your domain.
+- **Do not expose MySQL publicly** — remove the `mysql` `ports:` mapping, bind it to `127.0.0.1`, or block it at the firewall.
+- Put the app behind an **HTTPS reverse proxy** (Nginx / Caddy / Traefik) and point `VITE_API_BASE_URL` at your domain.
 
 ### 3. Useful commands
 
@@ -352,12 +369,9 @@ npm shortcuts are also available: `npm run docker:up`, `docker:down`, `docker:lo
 - `docker compose down` stops the containers but **keeps** the `mysql_data` and `purchase_attachments` volumes — your data and uploaded supplier invoices survive.
 - `docker compose down -v` **deletes** those volumes. **Never run `down -v` on production** unless you intentionally want to wipe the database.
 
-### 5. Migrations & seeding
+### 5. Demo data
 
-- On startup the backend runs **`prisma migrate deploy`** (migrations only — never `prisma db push`).
-- It then runs the **standard seed**, which is **idempotent** and **production-safe**: system data only (settings, currencies, units, roles/permissions, feature flags, tax/barcode/measurement defaults, and the admin user if missing). See [What gets seeded](#what-gets-seeded).
-- **Demo/dev data does not run by default.** To include sample products/suppliers/sales etc., set `SEED_DEV_DATA=true` in `.env` and rebuild.
-- To re-run manually against the running stack: `npm run docker:migrate` and `npm run docker:seed`.
+Demo data is off by default. To include sample products/suppliers/sales, set `SEED_DEV_DATA=true` in `.env` and rebuild.
 
 ### 6. Deploying on a VPS
 
@@ -365,15 +379,15 @@ npm shortcuts are also available: `npm run docker:up`, `docker:down`, `docker:lo
 git clone https://github.com/mmd-rehan/textile-pos.git
 cd textile-pos
 cp .env.example .env
-# edit .env: strong secrets, admin password, and set VITE_API_BASE_URL + CORS_ORIGIN
-# to your public URLs (e.g. https://app.example.com and https://api.example.com/api/v1)
+# edit .env: strong secrets, admin password, and set VITE_API_BASE_URL
+# to your public API URL (e.g. https://api.example.com/api/v1)
 
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 `docker-compose.prod.yml` sets `restart: always` so the stack survives reboots. In production you should additionally:
 
-- Front the services with an HTTPS reverse proxy (Nginx / Caddy / Traefik) and use domain-based `CORS_ORIGIN`.
+- Front the services with an HTTPS reverse proxy (Nginx / Caddy / Traefik).
 - Keep MySQL off the public internet (firewall / `127.0.0.1` binding).
 - Schedule **backups** of the `mysql_data` and `purchase_attachments` volumes.
 - Keep `.env` out of version control (it's gitignored).

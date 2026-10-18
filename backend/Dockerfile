@@ -16,7 +16,7 @@ RUN apt-get update -y \
 
 # Install dependencies (full set, incl. dev — needed to compile Nest and to run
 # the TypeScript seed via ts-node at container startup). We use `npm install`
-# (not `npm ci`) to match how this repo manages deps elsewhere (scripts/setup.sh,
+# (not `npm ci`) to match how this repo manages deps elsewhere (the npm workspaces,
 # frontend) and to tolerate minor package.json/lockfile drift; the lockfile is
 # copied so resolution stays close to it.
 COPY package.json package-lock.json ./

@@ -2,7 +2,7 @@
 #
 # Backend container entrypoint.
 #
-# Mirrors what `npm run setup` does to the database, then starts the API:
+# Mirrors what `npm run db:setup` does to the database, then starts the API:
 #   1. wait for MySQL to actually answer a query (belt-and-suspenders on top of
 #      the compose `depends_on: service_healthy` condition)
 #   2. prisma migrate deploy   (migrations only — never `prisma db push`)
